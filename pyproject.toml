@@ -1,0 +1,49 @@
+[project]
+name = "kuahene-core"
+version = "0.1.0"
+description = "Kuahene Core — on-premises AI security operations orchestration layer"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "sqlalchemy>=2.0,<3",
+    "alembic>=1.13,<2",
+    "asyncpg>=0.30,<1",
+    "redis>=5.0,<6",
+    "pydantic>=2.0,<3",
+    "pydantic-settings>=2.0,<3",
+    "httpx>=0.27,<1",
+    "jinja2>=3.1,<4",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9",
+    "pytest-asyncio>=0.24,<1",
+    "pytest-cov>=5.0,<6",
+    "ruff>=0.5,<1",
+    "mypy>=1.10,<2",
+    "httpx",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "S", "B", "A", "SIM"]
+ignore = ["S101"]  # allow assert in tests
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]

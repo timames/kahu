@@ -1,0 +1,39 @@
+services:
+  core:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - evidence-store:/data/evidence
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kuahene
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: kuahene
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kuahene"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:
+  evidence-store:
