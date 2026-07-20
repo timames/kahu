@@ -28,5 +28,8 @@ class Settings(BaseSettings):
     secret_key: str = "changeme-generate-a-real-key"
     debug: bool = False
 
+    # Agent deployment — the external IP/hostname agents should connect to
+    appliance_host: str = ""
+
 
 settings = Settings()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -47,9 +47,16 @@ async def get_triage_queue(
         stmt = stmt.outerjoin(AlertDisposition).where(AlertDisposition.id.is_(None))
 
     # Order: critical first, then by creation time descending
-    severity_order = func.array_position(
-        ["critical", "high", "medium", "low", "info"],
-        Alert.severity,
+    severity_order = case(
+        {
+            Severity.CRITICAL: 0,
+            Severity.HIGH: 1,
+            Severity.MEDIUM: 2,
+            Severity.LOW: 3,
+            Severity.INFO: 4,
+        },
+        value=Alert.severity,
+        else_=5,
     )
     stmt = stmt.order_by(severity_order, Alert.created_at.desc())
 

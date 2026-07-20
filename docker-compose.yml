@@ -4,13 +4,18 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
     volumes:
       - evidence-store:/data/evidence
+      - ./.env:/app/.env
 
   postgres:
     image: postgres:16-alpine
@@ -34,6 +39,167 @@ services:
       timeout: 3s
       retries: 5
 
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.9.2
+    hostname: wazuh-manager
+    ports:
+      - "1514:1514"
+      - "1515:1515"
+      - "55000:55000"
+    environment:
+      INDEXER_URL: https://wazuh-indexer:9200
+      INDEXER_USERNAME: admin
+      INDEXER_PASSWORD: SecretPassword
+      FILEBEAT_SSL_VERIFICATION_MODE: full
+      SSL_CERTIFICATE_AUTHORITIES: /etc/ssl/root-ca.pem
+      SSL_CERTIFICATE: /etc/ssl/filebeat.pem
+      SSL_KEY: /etc/ssl/filebeat-key.pem
+      API_USERNAME: wazuh-wui
+      API_PASSWORD: Kuahene@Wazuh2026!
+    volumes:
+      - wazuh-api-config:/var/ossec/api/configuration
+      - wazuh-etc:/var/ossec/etc
+      - wazuh-logs:/var/ossec/logs
+      - wazuh-queue:/var/ossec/queue
+      - wazuh-var-multigroups:/var/ossec/var/multigroups
+      - wazuh-integrations:/var/ossec/integrations
+      - wazuh-active-response:/var/ossec/active-response/bin
+      - wazuh-agentless:/var/ossec/agentless
+      - wazuh-wodles:/var/ossec/wodles
+      - filebeat-etc:/etc/filebeat
+      - filebeat-var:/var/lib/filebeat
+      - ./config/wazuh/certs/root-ca.pem:/etc/ssl/root-ca.pem:ro
+      - ./config/wazuh/certs/filebeat.pem:/etc/ssl/filebeat.pem:ro
+      - ./config/wazuh/certs/filebeat-key.pem:/etc/ssl/filebeat-key.pem:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk https://localhost:55000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  wazuh-indexer-certs-init:
+    image: alpine:3.20
+    volumes:
+      - ./config/wazuh/certs:/src-certs:ro
+      - indexer-certs:/usr/share/wazuh-indexer/certs
+    command: ["sh", "-c", "cp /src-certs/indexer.pem /src-certs/indexer-key.pem /src-certs/root-ca.pem /src-certs/admin.pem /src-certs/admin-key.pem /usr/share/wazuh-indexer/certs/ && chown -R 1000:1000 /usr/share/wazuh-indexer/certs && chmod 600 /usr/share/wazuh-indexer/certs/*-key.pem && chmod 644 /usr/share/wazuh-indexer/certs/*.pem && echo Certs ready"]
+
+  wazuh-indexer:
+    image: wazuh/wazuh-indexer:4.9.2
+    hostname: wazuh-indexer
+    ports:
+      - "9200:9200"
+    environment:
+      OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
+      bootstrap.memory_lock: "true"
+      discovery.type: single-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - wazuh-indexer-data:/var/lib/wazuh-indexer
+      - indexer-certs:/usr/share/wazuh-indexer/certs:ro
+      - ./config/wazuh/opensearch.yml:/usr/share/wazuh-indexer/opensearch.yml:ro
+    depends_on:
+      wazuh-indexer-certs-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sku admin:admin https://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  wazuh-dashboard:
+    image: wazuh/wazuh-dashboard:4.9.2
+    hostname: wazuh-dashboard
+    ports:
+      - "443:5601"
+    environment:
+      INDEXER_USERNAME: admin
+      INDEXER_PASSWORD: SecretPassword
+      WAZUH_API_URL: https://wazuh-manager
+      DASHBOARD_USERNAME: kibanaserver
+      DASHBOARD_PASSWORD: kibanaserver
+      API_USERNAME: wazuh-wui
+      API_PASSWORD: Kuahene@Wazuh2026!
+      SERVER_SSL_ENABLED: "true"
+      SERVER_SSL_CERTIFICATE: /usr/share/wazuh-dashboard/certs/dashboard.pem
+      SERVER_SSL_KEY: /usr/share/wazuh-dashboard/certs/dashboard-key.pem
+      OPENSEARCH_SSL_CERTIFICATEAUTHORITIES: /usr/share/wazuh-dashboard/certs/root-ca.pem
+    volumes:
+      - wazuh-dashboard-config:/usr/share/wazuh-dashboard/data/wazuh/config
+      - wazuh-dashboard-custom:/usr/share/wazuh-dashboard/plugins/wazuh/public/assets/custom
+      - ./config/wazuh/certs/dashboard.pem:/usr/share/wazuh-dashboard/certs/dashboard.pem:ro
+      - ./config/wazuh/certs/dashboard-key.pem:/usr/share/wazuh-dashboard/certs/dashboard-key.pem:ro
+      - ./config/wazuh/certs/root-ca.pem:/usr/share/wazuh-dashboard/certs/root-ca.pem:ro
+    depends_on:
+      wazuh-indexer:
+        condition: service_healthy
+      wazuh-manager:
+        condition: service_healthy
+
+  generator:
+    build: ./generator
+    container_name: kuahene-generator
+    restart: unless-stopped
+    environment:
+      TARGET_HOST: wazuh-manager
+      SYSLOG_PORT: "514"
+      SYSLOG_PROTO: tcp
+      DRY_RUN: "false"
+      AUTOSTART: "true"
+      INTENSITY: "1.0"
+      TIMEZONE: Pacific/Honolulu
+      API_TOKEN: demo-local-token
+      KUAHENE_HOST: core:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      wazuh-manager:
+        condition: service_healthy
+
 volumes:
   pgdata:
   evidence-store:
+  ollama-data:
+  indexer-certs:
+  wazuh-api-config:
+  wazuh-etc:
+  wazuh-logs:
+  wazuh-queue:
+  wazuh-var-multigroups:
+  wazuh-integrations:
+  wazuh-active-response:
+  wazuh-agentless:
+  wazuh-wodles:
+  filebeat-etc:
+  filebeat-var:
+  wazuh-indexer-data:
+  wazuh-dashboard-config:
+  wazuh-dashboard-custom:

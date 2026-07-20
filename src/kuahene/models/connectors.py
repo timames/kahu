@@ -22,7 +22,7 @@ class ConnectorInstance(Base, UUIDPrimaryKey, TimestampMixin):
 
     connector_type: Mapped[str] = mapped_column(String(100), index=True)
     name: Mapped[str] = mapped_column(String(255))
-    status: Mapped[ConnectorStatus] = mapped_column(Enum(ConnectorStatus))
+    status: Mapped[ConnectorStatus] = mapped_column(Enum(ConnectorStatus, values_callable=lambda x: [e.value for e in x]))
     config: Mapped[dict] = mapped_column(JSONB)
     control_tags: Mapped[list] = mapped_column(JSONB)
     last_event_at: Mapped[str | None] = mapped_column(Text)

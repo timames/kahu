@@ -31,7 +31,7 @@ class Alert(Base, UUIDPrimaryKey, TimestampMixin):
     wazuh_alert_id: Mapped[str] = mapped_column(String(255), index=True)
     rule_id: Mapped[str] = mapped_column(String(50))
     rule_description: Mapped[str] = mapped_column(Text)
-    severity: Mapped[Severity] = mapped_column(Enum(Severity))
+    severity: Mapped[Severity] = mapped_column(Enum(Severity, values_callable=lambda x: [e.value for e in x]))
     agent_name: Mapped[str | None] = mapped_column(String(255))
     raw_event: Mapped[dict] = mapped_column(JSONB)
     enrichment: Mapped[dict | None] = mapped_column(JSONB)
@@ -46,7 +46,7 @@ class AlertDisposition(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "alert_dispositions"
 
     alert_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("alerts.id"), unique=True)
-    verdict: Mapped[DispositionVerdict] = mapped_column(Enum(DispositionVerdict))
+    verdict: Mapped[DispositionVerdict] = mapped_column(Enum(DispositionVerdict, values_callable=lambda x: [e.value for e in x]))
     analyst: Mapped[str] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
 

@@ -1,0 +1,37 @@
+services:
+  generator:
+    build: ./generator
+    container_name: kuahene-demo-gen
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Bind to localhost only; Caddy terminates TLS in front of it.
+      - "127.0.0.1:8080:8080"
+    networks: [demo]
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: kuahene-demo-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [demo]
+    depends_on: [generator]
+
+networks:
+  demo:
+
+volumes:
+  caddy_data:
+  caddy_config:

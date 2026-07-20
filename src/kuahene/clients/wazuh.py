@@ -23,17 +23,48 @@ class WazuhAPIClient:
             resp.raise_for_status()
             self._token = resp.json()["data"]["token"]
 
-    async def get_alerts(self, limit: int = 20, offset: int = 0) -> dict:
+    async def _ensure_auth(self) -> None:
         if not self._token:
             await self.authenticate()
-        async with httpx.AsyncClient(verify=False) as client:  # noqa: S501
+
+    async def api_get(self, path: str, params: dict | None = None) -> dict:
+        """Generic authenticated GET against the Wazuh API."""
+        await self._ensure_auth()
+        async with httpx.AsyncClient(verify=False, timeout=15) as client:  # noqa: S501
             resp = await client.get(
-                f"{self.base_url}/alerts",
+                f"{self.base_url}{path}",
                 headers={"Authorization": f"Bearer {self._token}"},
-                params={"limit": limit, "offset": offset},
+                params=params,
             )
             resp.raise_for_status()
             return resp.json()
+
+    async def api_put(self, path: str, json: dict | None = None) -> dict:
+        """Generic authenticated PUT."""
+        await self._ensure_auth()
+        async with httpx.AsyncClient(verify=False, timeout=15) as client:  # noqa: S501
+            resp = await client.put(
+                f"{self.base_url}{path}",
+                headers={"Authorization": f"Bearer {self._token}"},
+                json=json,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def api_delete(self, path: str, params: dict | None = None) -> dict:
+        """Generic authenticated DELETE."""
+        await self._ensure_auth()
+        async with httpx.AsyncClient(verify=False, timeout=15) as client:  # noqa: S501
+            resp = await client.delete(
+                f"{self.base_url}{path}",
+                headers={"Authorization": f"Bearer {self._token}"},
+                params=params,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def get_alerts(self, limit: int = 20, offset: int = 0) -> dict:
+        return await self.api_get("/alerts", params={"limit": limit, "offset": offset})
 
 
 class WazuhIndexerClient:

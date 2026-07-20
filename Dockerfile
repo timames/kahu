@@ -5,9 +5,10 @@ WORKDIR /app
 RUN addgroup --system kuahene && adduser --system --ingroup kuahene kuahene
 
 COPY pyproject.toml ./
+COPY src/ ./src/
+
 RUN pip install --no-cache-dir .
 
-COPY src/ ./src/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 
