@@ -158,6 +158,9 @@ services:
       - ./config/wazuh/certs/dashboard.pem:/usr/share/wazuh-dashboard/certs/dashboard.pem:ro
       - ./config/wazuh/certs/dashboard-key.pem:/usr/share/wazuh-dashboard/certs/dashboard-key.pem:ro
       - ./config/wazuh/certs/root-ca.pem:/usr/share/wazuh-dashboard/certs/root-ca.pem:ro
+      - ./config/wazuh/certs/dashboard.pem:/etc/wazuh-dashboard/certs/dashboard.pem:ro
+      - ./config/wazuh/certs/dashboard-key.pem:/etc/wazuh-dashboard/certs/dashboard-key.pem:ro
+      - ./config/wazuh/certs/root-ca.pem:/etc/wazuh-dashboard/certs/root-ca.pem:ro
     depends_on:
       wazuh-indexer:
         condition: service_healthy
