@@ -3,6 +3,7 @@
 const API = '/api/m';
 const TRIAGE_API = '/api/triage';
 const INVEST_API = '/api/investigation';
+const CONN_API = '/api/connectors';
 let currentScreen = 'glance';
 let feedCards = [];
 let feedRemaining = 0;
@@ -21,6 +22,7 @@ function navigate(screen) {
   if (screen === 'feed') loadFeed();
   if (screen === 'score') loadScore();
   if (screen === 'profile') loadProfile();
+  if (screen === 'sources') loadSources();
   if (screen === 'settings') loadSettings();
 }
 
@@ -593,6 +595,270 @@ function getBadgeIcon(name) {
   return '🏅';
 }
 
+// ---- Sources Screen ----
+
+let connectorCatalog = null;
+let selectedConnectorType = null;
+
+async function loadSources() {
+  const [overview, sources] = await Promise.all([
+    api(`${CONN_API}/overview`),
+    api(`${CONN_API}/sources`),
+  ]);
+
+  if (overview._offline) return;
+
+  // Stats
+  const statsEl = document.getElementById('sources-stats');
+  statsEl.innerHTML = `
+    <div class="src-stat">
+      <div class="src-stat-value">${overview.total_sources}</div>
+      <div class="src-stat-label">Sources</div>
+    </div>
+    <div class="src-stat">
+      <div class="src-stat-value" style="color:var(--green)">${overview.active_sources}</div>
+      <div class="src-stat-label">Active</div>
+    </div>
+    <div class="src-stat">
+      <div class="src-stat-value">${overview.events_today.toLocaleString()}</div>
+      <div class="src-stat-label">Events today</div>
+    </div>
+  `;
+
+  // Source list
+  const listEl = document.getElementById('sources-list');
+  if (sources.length === 0) {
+    listEl.innerHTML = `
+      <div class="sources-empty">
+        <div class="sources-empty-icon">📡</div>
+        <h3>No sources connected</h3>
+        <p>Tap + to add your first log source.<br>Firewalls, endpoints, cloud apps — all in one place.</p>
+      </div>`;
+    return;
+  }
+
+  listEl.innerHTML = sources.map(s => `
+    <div class="source-card" onclick="toggleSourceMenu('${s.id}')">
+      <div class="source-icon">${escHtml(s.type_icon)}</div>
+      <div class="source-info">
+        <div class="source-name">${escHtml(s.name)}</div>
+        <div class="source-type">${escHtml(s.type_name)}</div>
+        <div class="source-events">${s.events_today.toLocaleString()} events today · ${s.events_total.toLocaleString()} total</div>
+      </div>
+      <div class="source-status ${s.status}" title="${s.status}${s.error_message ? ': ' + s.error_message : ''}"></div>
+    </div>
+  `).join('');
+}
+
+function toggleSourceMenu(id) {
+  // Future: expand card to show actions (test, disable, delete)
+}
+
+async function openAddSource() {
+  const modal = document.getElementById('add-source-modal');
+
+  // Load catalog if not cached
+  if (!connectorCatalog) {
+    const data = await api(`${CONN_API}/catalog`);
+    if (data._offline) return;
+    connectorCatalog = data;
+  }
+
+  // Show step 1
+  showSrcStep('catalog');
+
+  // Render category tabs
+  const tabsEl = document.getElementById('src-category-tabs');
+  const allTab = { id: 'all', name: 'All', count: connectorCatalog.connectors.length };
+  const cats = [allTab, ...connectorCatalog.categories];
+  tabsEl.innerHTML = cats.map((c, i) =>
+    `<div class="src-cat-tab ${i === 0 ? 'active' : ''}" onclick="filterCatalog('${c.id}')">${c.name} (${c.count})</div>`
+  ).join('');
+
+  // Render all connectors
+  filterCatalog('all');
+
+  modal.classList.add('active');
+}
+
+function filterCatalog(category) {
+  // Update tab state
+  document.querySelectorAll('.src-cat-tab').forEach(t => t.classList.remove('active'));
+  const tabs = document.querySelectorAll('.src-cat-tab');
+  for (const t of tabs) {
+    if (t.textContent.startsWith(category === 'all' ? 'All' : '')) t.classList.add('active');
+  }
+  // Find by category name match
+  document.querySelectorAll('.src-cat-tab').forEach(t => {
+    const catData = connectorCatalog.categories.find(c => t.textContent.includes(c.name));
+    if (category === 'all' && t.textContent.startsWith('All')) t.classList.add('active');
+    else if (catData && catData.id === category) t.classList.add('active');
+    else if (category !== 'all') { /* keep non-matching inactive */ }
+  });
+
+  const filtered = category === 'all'
+    ? connectorCatalog.connectors
+    : connectorCatalog.connectors.filter(c => c.category === category);
+
+  const listEl = document.getElementById('src-type-list');
+  listEl.innerHTML = filtered.map(c => `
+    <div class="src-type-item" onclick="selectConnectorType('${c.id}')">
+      <div class="src-type-icon">${c.icon}</div>
+      <div class="src-type-info">
+        <div class="src-type-name">${escHtml(c.name)}</div>
+        <div class="src-type-desc">${escHtml(c.description)}</div>
+        <div class="src-type-vol">${c.events_per_day} events/day typical</div>
+      </div>
+      <div class="src-type-arrow">›</div>
+    </div>
+  `).join('');
+}
+
+function selectConnectorType(typeId) {
+  const ct = connectorCatalog.connectors.find(c => c.id === typeId);
+  if (!ct) return;
+  selectedConnectorType = ct;
+
+  // Header
+  document.getElementById('src-config-header').innerHTML = `
+    <div class="src-type-icon">${ct.icon}</div>
+    <h3>${escHtml(ct.name)}</h3>
+  `;
+
+  // Name field + credential fields
+  const fieldsEl = document.getElementById('src-config-fields');
+  let html = `
+    <div class="src-field-name">
+      <label>Source Name <span class="required">*</span></label>
+      <input id="src-name" type="text" placeholder="e.g. Main Office Firewall" required>
+    </div>
+  `;
+
+  for (const f of ct.fields) {
+    if (f.type === 'select') {
+      const options = f.placeholder.split(',');
+      html += `
+        <div class="src-field">
+          <label>${escHtml(f.label)} ${f.required ? '<span class="required">*</span>' : ''}</label>
+          <select name="${f.name}" ${f.required ? 'required' : ''}>
+            ${options.map(o => `<option value="${o.trim()}">${escHtml(o.trim())}</option>`).join('')}
+          </select>
+          ${f.help_text ? `<span class="src-help">${escHtml(f.help_text)}</span>` : ''}
+        </div>`;
+    } else if (f.type === 'textarea') {
+      html += `
+        <div class="src-field">
+          <label>${escHtml(f.label)} ${f.required ? '<span class="required">*</span>' : ''}</label>
+          <textarea name="${f.name}" placeholder="${escHtml(f.placeholder)}" ${f.required ? 'required' : ''}></textarea>
+          ${f.help_text ? `<span class="src-help">${escHtml(f.help_text)}</span>` : ''}
+        </div>`;
+    } else {
+      html += `
+        <div class="src-field">
+          <label>${escHtml(f.label)} ${f.required ? '<span class="required">*</span>' : ''}</label>
+          <input name="${f.name}" type="${f.type === 'password' ? 'password' : 'text'}"
+                 placeholder="${escHtml(f.placeholder)}" ${f.required ? 'required' : ''}>
+          ${f.help_text ? `<span class="src-help">${escHtml(f.help_text)}</span>` : ''}
+        </div>`;
+    }
+  }
+  fieldsEl.innerHTML = html;
+
+  // Setup guide link
+  const linkEl = document.getElementById('src-setup-link');
+  if (ct.setup_guide_url) {
+    linkEl.innerHTML = `
+      <a href="${ct.setup_guide_url}" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        How to configure ${escHtml(ct.name)}
+      </a>`;
+  } else {
+    linkEl.innerHTML = '';
+  }
+
+  showSrcStep('config');
+}
+
+async function submitSource(e) {
+  e.preventDefault();
+  const form = document.getElementById('src-config-form');
+  const btn = form.querySelector('.src-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Connecting...';
+
+  const name = document.getElementById('src-name').value.trim();
+  const credentials = {};
+  const config = {};
+
+  for (const f of selectedConnectorType.fields) {
+    const el = form.querySelector(`[name="${f.name}"]`);
+    if (!el) continue;
+    const val = el.value.trim();
+    if (f.type === 'password' || f.name.includes('secret') || f.name.includes('key') || f.name.includes('password') || f.name.includes('token')) {
+      credentials[f.name] = val;
+    } else {
+      config[f.name] = val;
+    }
+  }
+
+  try {
+    // Create source
+    const source = await api(`${CONN_API}/sources`, {
+      method: 'POST',
+      body: JSON.stringify({
+        connector_type: selectedConnectorType.id,
+        name,
+        config,
+        credentials,
+      }),
+    });
+
+    if (source._offline) {
+      showSrcResult(false, 'Offline', 'Cannot add sources while offline.');
+      return;
+    }
+
+    // Test connection
+    const test = await api(`${CONN_API}/sources/${source.id}/test`, { method: 'POST' });
+
+    if (test.success) {
+      showSrcResult(true, 'Connected!', test.message);
+    } else {
+      showSrcResult(false, 'Connection Failed', test.message);
+    }
+  } catch (err) {
+    showSrcResult(false, 'Error', err.message || 'Something went wrong');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Add & Test Connection';
+}
+
+function showSrcResult(success, title, message) {
+  document.getElementById('src-result-content').innerHTML = `
+    <div class="src-result-icon">${success ? '✅' : '❌'}</div>
+    <div class="src-result-title">${escHtml(title)}</div>
+    <div class="src-result-msg">${escHtml(message)}</div>
+  `;
+  showSrcStep('result');
+}
+
+function showSrcStep(step) {
+  document.querySelectorAll('.src-step').forEach(s => s.classList.remove('active'));
+  document.getElementById('src-step-' + step).classList.add('active');
+}
+
+function srcStepBack() {
+  showSrcStep('catalog');
+}
+
+function closeAddSource() {
+  document.getElementById('add-source-modal').classList.remove('active');
+  selectedConnectorType = null;
+  // Refresh sources list
+  if (currentScreen === 'sources') loadSources();
+}
+
 // ---- Utilities ----
 
 function escHtml(s) {
@@ -633,11 +899,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Coach modal — close on overlay click
+  // Modals — close on overlay click
   const modal = document.getElementById('coach-modal');
   if (modal) {
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeCoach();
+    });
+  }
+  const srcModal = document.getElementById('add-source-modal');
+  if (srcModal) {
+    srcModal.addEventListener('click', (e) => {
+      if (e.target === srcModal) closeAddSource();
     });
   }
 

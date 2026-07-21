@@ -134,6 +134,21 @@
     </div>
   </div>
 
+  <!-- ===== SOURCES ===== -->
+  <div id="screen-sources" class="screen">
+    <div class="sources-header">
+      <h2>Sources</h2>
+      <button class="sources-add-btn" onclick="openAddSource()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    </div>
+
+    <div id="sources-stats" class="sources-stats"></div>
+    <div id="sources-list" class="sources-list">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+
   <!-- ===== SETTINGS ===== -->
   <div id="screen-settings" class="screen">
     <div class="settings-group">
@@ -204,9 +219,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       <span>Profile</span>
     </button>
-    <button data-screen="settings" onclick="navigate('settings')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      <span>Settings</span>
+    <button data-screen="sources" onclick="navigate('sources')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      <span>Sources</span>
     </button>
   </nav>
 
@@ -223,6 +238,40 @@
       <span class="coach-tip-text"></span>
     </div>
     <button class="modal-close" onclick="closeCoach()">Got it</button>
+  </div>
+</div>
+
+<!-- ===== ADD SOURCE MODAL ===== -->
+<div id="add-source-modal" class="modal-overlay">
+  <div class="modal-sheet modal-tall">
+    <div class="modal-handle"></div>
+
+    <!-- Step 1: Pick type -->
+    <div id="src-step-catalog" class="src-step active">
+      <h3>Add a Source</h3>
+      <div id="src-category-tabs" class="src-category-tabs"></div>
+      <div id="src-type-list" class="src-type-list"></div>
+    </div>
+
+    <!-- Step 2: Enter creds -->
+    <div id="src-step-config" class="src-step">
+      <button class="src-back" onclick="srcStepBack()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Back
+      </button>
+      <div id="src-config-header" class="src-config-header"></div>
+      <form id="src-config-form" class="src-config-form" onsubmit="return submitSource(event)">
+        <div id="src-config-fields"></div>
+        <div id="src-setup-link" class="src-setup-link"></div>
+        <button type="submit" class="src-submit-btn">Add &amp; Test Connection</button>
+      </form>
+    </div>
+
+    <!-- Step 3: Result -->
+    <div id="src-step-result" class="src-step">
+      <div id="src-result-content" class="src-result-content"></div>
+      <button class="modal-close" onclick="closeAddSource()">Done</button>
+    </div>
   </div>
 </div>
 
