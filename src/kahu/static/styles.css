@@ -1547,8 +1547,27 @@ nav .badge {
 /* ── Add Source Modal ──────────────────────────────── */
 
 .modal-tall {
-  max-height: 85vh;
+  max-height: 90vh;
+  max-width: 720px;
+  width: 95%;
+  border-radius: var(--radius);
   overflow-y: auto;
+  scrollbar-width: none;
+}
+.modal-tall::-webkit-scrollbar { display: none; }
+
+/* Desktop: center the modal instead of bottom-sheet */
+@media (min-width: 600px) {
+  .modal-overlay {
+    align-items: center;
+  }
+  .modal-tall {
+    max-height: 85vh;
+    border-radius: var(--radius);
+  }
+  .modal-tall .modal-handle {
+    display: none;
+  }
 }
 
 .src-step { display: none; }
@@ -1579,11 +1598,16 @@ nav .badge {
 }
 
 .src-type-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 6px;
-  max-height: 50vh;
-  overflow-y: auto;
+}
+
+@media (min-width: 600px) {
+  .src-type-list {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
 }
 .src-type-item {
   display: flex;
@@ -1630,6 +1654,17 @@ nav .badge {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+@media (min-width: 600px) {
+  #src-config-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  #src-config-fields .src-field-name {
+    grid-column: 1 / -1;
+  }
 }
 .src-field {
   display: flex;
