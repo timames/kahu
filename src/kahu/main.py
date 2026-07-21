@@ -39,3 +39,13 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.get("/")
 async def root():
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/sw.js")
+async def service_worker():
+    """Serve SW from root so it can control the entire scope."""
+    return FileResponse(
+        STATIC_DIR / "sw.js",
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/"},
+    )
