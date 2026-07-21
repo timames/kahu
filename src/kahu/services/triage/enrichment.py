@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 RELATED_EVENT_WINDOW_MINUTES = 15
 MAX_RELATED_EVENTS = 50
-MAX_HISTORICAL_DISPOSITIONS = 10
+MAX_HISTORICAL_DISPOSITIONS = 100
 
 
 @dataclass
@@ -65,16 +65,22 @@ async def enrich_alert_group(
         sources.append("vuln_state")
 
     # --- Historical dispositions of same rule from Postgres ---
-    historical = await _fetch_historical_dispositions(rule_id, session)
-    if historical:
-        sources.append("historical_dispositions")
+    rule_history = await _fetch_historical_dispositions(rule_id, session)
+    if rule_history:
+        sources.append("rule_history")
+
+    # --- Agent-level disposition history ---
+    agent_history = await _fetch_agent_history(agent_name, session)
+    if agent_history:
+        sources.append("agent_history")
 
     enriched_data = {
         "alert": alert,
         "asset_context": asset_context,
         "related_events": related_events,
         "vuln_state": vuln_state,
-        "historical_dispositions": historical,
+        "rule_history": rule_history,
+        "agent_history": agent_history,
     }
 
     # Build the redacted text representation for prompt assembly
@@ -217,10 +223,14 @@ async def _fetch_vuln_state(
 async def _fetch_historical_dispositions(
     rule_id: str,
     session: AsyncSession | None,
-) -> list[dict]:
-    """Find how analysts have previously dispositioned alerts with this rule_id."""
+) -> dict:
+    """Compute aggregate disposition stats for this rule_id.
+
+    Returns a dict with total count, verdict breakdown, false positive rate,
+    and recent examples — giving the LLM a strong statistical signal.
+    """
     if session is None or not rule_id:
-        return []
+        return {}
 
     try:
         stmt = (
@@ -233,19 +243,95 @@ async def _fetch_historical_dispositions(
         result = await session.execute(stmt)
         rows = result.all()
 
-        return [
+        if not rows:
+            return {}
+
+        # Aggregate verdict counts
+        verdict_counts: dict[str, int] = {}
+        analyst_counts: dict[str, int] = {}
+        for alert_row, disp_row in rows:
+            v = disp_row.verdict.value
+            verdict_counts[v] = verdict_counts.get(v, 0) + 1
+            a = disp_row.analyst
+            analyst_counts[a] = analyst_counts.get(a, 0) + 1
+
+        total = len(rows)
+        fp_count = verdict_counts.get("false_positive", 0)
+        tp_count = verdict_counts.get("true_positive", 0)
+        fp_rate = round(fp_count / total, 2) if total > 0 else 0
+
+        # Recent examples (last 5)
+        recent = [
             {
-                "severity": row[0].severity.value if isinstance(row[0].severity, Severity) else row[0].severity,
                 "verdict": row[1].verdict.value,
                 "analyst": row[1].analyst,
-                "notes": row[1].notes,
+                "notes": (row[1].notes or "")[:100],
                 "date": row[0].created_at.isoformat() if row[0].created_at else None,
             }
-            for row in rows
+            for row in rows[:5]
         ]
+
+        return {
+            "total_dispositions": total,
+            "verdict_breakdown": verdict_counts,
+            "false_positive_rate": fp_rate,
+            "true_positive_count": tp_count,
+            "false_positive_count": fp_count,
+            "analysts_involved": list(analyst_counts.keys())[:5],
+            "recent_examples": recent,
+        }
     except Exception:
         logger.warning("Failed to fetch historical dispositions", exc_info=True)
-        return []
+        return {}
+
+
+async def _fetch_agent_history(
+    agent_name: str,
+    session: AsyncSession | None,
+) -> dict:
+    """Compute disposition stats for this specific agent/host.
+
+    Shows whether this host tends to generate noise or real threats.
+    """
+    if session is None or not agent_name:
+        return {}
+
+    try:
+        stmt = (
+            select(Alert, AlertDisposition)
+            .join(AlertDisposition, AlertDisposition.alert_id == Alert.id)
+            .where(Alert.agent_name == agent_name)
+            .order_by(Alert.created_at.desc())
+            .limit(MAX_HISTORICAL_DISPOSITIONS)
+        )
+        result = await session.execute(stmt)
+        rows = result.all()
+
+        if not rows:
+            return {}
+
+        verdict_counts: dict[str, int] = {}
+        severity_counts: dict[str, int] = {}
+        for alert_row, disp_row in rows:
+            v = disp_row.verdict.value
+            verdict_counts[v] = verdict_counts.get(v, 0) + 1
+            s = alert_row.severity.value if isinstance(alert_row.severity, Severity) else alert_row.severity
+            severity_counts[s] = severity_counts.get(s, 0) + 1
+
+        total = len(rows)
+        fp_count = verdict_counts.get("false_positive", 0)
+        fp_rate = round(fp_count / total, 2) if total > 0 else 0
+
+        return {
+            "agent_name": agent_name,
+            "total_alerts": total,
+            "verdict_breakdown": verdict_counts,
+            "severity_breakdown": severity_counts,
+            "false_positive_rate": fp_rate,
+        }
+    except Exception:
+        logger.warning("Failed to fetch agent history", exc_info=True)
+        return {}
 
 
 def _parse_wazuh_timestamp(ts: str) -> datetime:
