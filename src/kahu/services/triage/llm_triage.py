@@ -34,11 +34,11 @@ RULES:
 - Never recommend autonomous remediation. All actions require human approval.
 
 DISPOSITION HISTORY IS YOUR STRONGEST SIGNAL:
-- If a rule's false-positive rate is above 80%, your default verdict MUST be
-  "false_positive" unless THIS specific alert has clear indicators of compromise.
-- If a rule's false-positive rate is above 50%, lean toward "false_positive" and
+- If a rule's acknowledge rate is above 80%, your default verdict MUST be
+  "acknowledge" unless THIS specific alert has clear indicators of compromise.
+- If a rule's acknowledge rate is above 50%, lean toward "acknowledge" and
   explain what would make this instance different from the historical norm.
-- If a host/agent has a high false-positive rate, treat new alerts from it with
+- If a host/agent has a high acknowledge rate, treat new alerts from it with
   increased skepticism — it is likely a noisy host.
 - If a rule has historically been "true_positive", treat it seriously even at
   lower rule levels.
@@ -57,7 +57,7 @@ Analyze this security alert and provide a structured triage assessment.
 Respond with ONLY valid JSON in this exact format:
 {{
   "severity": "critical|high|medium|low|info",
-  "recommended_verdict": "true_positive|false_positive|escalate",
+  "recommended_verdict": "true_positive|acknowledge|escalate",
   "explanation": "Plain-English explanation of what happened and why it matters",
   "benign_explanations": ["List of probable benign explanations if any"],
   "recommended_actions": ["Specific next steps for the analyst"],
@@ -170,7 +170,7 @@ def _build_prompt_data(enriched: EnrichedAlert) -> str:
         hist_block = (
             f"RULE DISPOSITION HISTORY (strong signal — weight this heavily):\n"
             f"  Total prior dispositions for this rule: {total}\n"
-            f"  False-positive rate: {fp_rate:.0%} ({fp_count}/{total})\n"
+            f"  Acknowledge rate: {fp_rate:.0%} ({fp_count}/{total})\n"
             f"  True-positive count: {tp_count}\n"
             f"  Full verdict breakdown: {verdicts}"
         )
@@ -188,13 +188,13 @@ def _build_prompt_data(enriched: EnrichedAlert) -> str:
         # Add directive based on FP rate
         if fp_rate >= 0.8:
             hist_block += (
-                f"\n  >>> STRONG SIGNAL: {fp_rate:.0%} false-positive rate. "
-                f"Default to false_positive unless clear IOCs are present."
+                f"\n  >>> STRONG SIGNAL: {fp_rate:.0%} acknowledge rate. "
+                f"Default to acknowledge unless clear IOCs are present."
             )
         elif fp_rate >= 0.5:
             hist_block += (
-                f"\n  >>> MODERATE SIGNAL: {fp_rate:.0%} false-positive rate. "
-                f"Lean toward false_positive; explain what makes this instance different."
+                f"\n  >>> MODERATE SIGNAL: {fp_rate:.0%} acknowledge rate. "
+                f"Lean toward acknowledge; explain what makes this instance different."
             )
         elif tp_count > fp_count and total >= 5:
             hist_block += (
@@ -215,7 +215,7 @@ def _build_prompt_data(enriched: EnrichedAlert) -> str:
         agent_block = (
             f"HOST DISPOSITION HISTORY ({agent_hist.get('agent_name', '?')}):\n"
             f"  Total alerts from this host: {agent_total}\n"
-            f"  Host false-positive rate: {agent_fp_rate:.0%}\n"
+            f"  Host acknowledge rate: {agent_fp_rate:.0%}\n"
             f"  Verdict breakdown: {agent_verdicts}\n"
             f"  Severity breakdown: {agent_sevs}"
         )
@@ -250,7 +250,7 @@ def _parse_llm_response(raw: str) -> dict:
         if result["severity"] not in {"critical", "high", "medium", "low", "info", None}:
             result["severity"] = None
         # Validate verdict
-        if result.get("recommended_verdict") not in {"true_positive", "false_positive", "escalate", None}:
+        if result.get("recommended_verdict") not in {"true_positive", "acknowledge", "escalate", None}:
             result["recommended_verdict"] = None
         return result
     except (json.JSONDecodeError, Exception) as e:

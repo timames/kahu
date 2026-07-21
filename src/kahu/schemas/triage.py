@@ -40,7 +40,7 @@ class AlertDetail(BaseModel):
 class DispositionIn(BaseModel):
     verdict: str = Field(
         ...,
-        pattern="^(true_positive|false_positive|benign_true_positive|undetermined)$",
+        pattern="^(true_positive|acknowledged|false_positive|benign_true_positive|undetermined)$",
         description="Analyst verdict for this alert",
     )
     analyst: str = Field(..., min_length=1, max_length=255)

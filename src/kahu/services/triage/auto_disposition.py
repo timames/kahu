@@ -6,9 +6,9 @@ true positives. Records all auto-dispositions with analyst="kahu-ai" so the
 evidence trail is clear.
 
 Tolerance thresholds:
-  Conservative (1): auto-dismiss at 95%+, never auto-confirm
-  Balanced (2):     auto-dismiss at 80%+, auto-confirm at 90%+
-  Aggressive (3):   auto-dismiss at 60%+, auto-confirm at 75%+
+  Conservative (1): auto-acknowledge at 95%+, never auto-confirm
+  Balanced (2):     auto-acknowledge at 80%+, auto-confirm at 90%+
+  Aggressive (3):   auto-acknowledge at 60%+, auto-confirm at 75%+
 """
 
 from __future__ import annotations
@@ -90,10 +90,10 @@ async def maybe_auto_dispose(
     if not ai_verdict:
         ai_verdict = _infer_verdict(confidence, benign, severity, llm_severity, rule_fp_rate)
 
-    # Check for auto-dismiss (false positive)
-    if ai_verdict == "false_positive":
+    # Check for auto-acknowledge (false positive)
+    if ai_verdict == "acknowledged":
         # Compute dismiss confidence by combining available signals
-        if llm_output.get("recommended_verdict") == "false_positive":
+        if llm_output.get("recommended_verdict") == "acknowledged":
             dismiss_conf = confidence
         else:
             # LLM-derived FP confidence (inverted — low threat = high FP)
@@ -107,15 +107,15 @@ async def maybe_auto_dispose(
         if dismiss_conf >= dismiss_threshold:
             await record_disposition(
                 alert_id=alert.id,
-                verdict=DispositionVerdict.FALSE_POSITIVE,
+                verdict=DispositionVerdict.ACKNOWLEDGED,
                 analyst=AI_ANALYST,
-                notes=f"Auto-dismissed by AI (confidence: {dismiss_conf:.0%}, tolerance: {tolerance})",
+                notes=f"Auto-acknowledged by AI (confidence: {dismiss_conf:.0%}, tolerance: {tolerance})",
                 session=session,
             )
-            logger.info("Auto-dismissed alert %s (confidence=%.2f)", alert.id, dismiss_conf)
+            logger.info("Auto-acknowledged alert %s (confidence=%.2f)", alert.id, dismiss_conf)
             return AutoDispositionResult(
                 auto_handled=True,
-                verdict="false_positive",
+                verdict="acknowledged",
                 confidence=dismiss_conf,
             )
 
@@ -168,19 +168,19 @@ def _infer_verdict(
     if rule_fp_rate is not None and rule_fp_rate >= 0.6:
         # 60%+ FP rate: dismiss unless LLM is highly confident it's real
         if confidence < 0.85 or len(benign) >= 1:
-            return "false_positive"
+            return "acknowledged"
     if rule_fp_rate is not None and rule_fp_rate >= 0.5:
         # 50%+ FP rate with any benign explanation or moderate confidence
         if len(benign) >= 1 or confidence <= 0.7:
-            return "false_positive"
+            return "acknowledged"
 
     # Strong false positive signals (original logic)
     if len(benign) >= 2 and confidence <= 0.5:
-        return "false_positive"
+        return "acknowledged"
     if confidence <= 0.3 and severity in ("low", "info"):
-        return "false_positive"
+        return "acknowledged"
     if llm_severity in ("low", "info") and confidence <= 0.4:
-        return "false_positive"
+        return "acknowledged"
 
     # Strong true positive signals
     if confidence >= 0.8 and not benign and severity in ("critical", "high"):
@@ -190,7 +190,7 @@ def _infer_verdict(
 
     # Medium confidence with info/low severity — likely noise
     if confidence <= 0.5 and severity in ("low", "info") and len(benign) >= 1:
-        return "false_positive"
+        return "acknowledged"
 
     return None  # Uncertain — human reviews
 
@@ -220,7 +220,10 @@ async def _get_rule_fp_rate(rule_id: str, session: AsyncSession) -> float | None
             .select_from(Alert)
             .join(AlertDisposition, AlertDisposition.alert_id == Alert.id)
             .where(Alert.rule_id == rule_id)
-            .where(AlertDisposition.verdict == DispositionVerdict.FALSE_POSITIVE)
+            .where(AlertDisposition.verdict.in_([
+                DispositionVerdict.ACKNOWLEDGED,
+                DispositionVerdict.FALSE_POSITIVE,
+            ]))
         )
         fp_count = await session.scalar(fp_stmt) or 0
 

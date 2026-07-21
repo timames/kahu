@@ -256,7 +256,8 @@ async def _fetch_historical_dispositions(
             analyst_counts[a] = analyst_counts.get(a, 0) + 1
 
         total = len(rows)
-        fp_count = verdict_counts.get("false_positive", 0)
+        # Count both legacy "false_positive" and new "acknowledged" as the same signal
+        fp_count = verdict_counts.get("false_positive", 0) + verdict_counts.get("acknowledged", 0)
         tp_count = verdict_counts.get("true_positive", 0)
         fp_rate = round(fp_count / total, 2) if total > 0 else 0
 
@@ -319,7 +320,7 @@ async def _fetch_agent_history(
             severity_counts[s] = severity_counts.get(s, 0) + 1
 
         total = len(rows)
-        fp_count = verdict_counts.get("false_positive", 0)
+        fp_count = verdict_counts.get("false_positive", 0) + verdict_counts.get("acknowledged", 0)
         fp_rate = round(fp_count / total, 2) if total > 0 else 0
 
         return {

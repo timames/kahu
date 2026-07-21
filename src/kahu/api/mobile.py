@@ -184,13 +184,16 @@ async def feed(
         # Derive AI verdict: use LLM's explicit recommendation, or infer from confidence + benign
         ai_verdict = llm.get("recommended_verdict")
         ai_confidence = llm.get("confidence", 0.0)
+        # Normalize legacy "false_positive" to "acknowledge"
+        if ai_verdict == "false_positive":
+            ai_verdict = "acknowledge"
         if not ai_verdict and not llm.get("degraded"):
             # Infer from confidence and benign explanations
             benign = llm.get("benign_explanations", [])
             if ai_confidence >= 0.7 and not benign:
                 ai_verdict = "true_positive"
             elif ai_confidence < 0.3 or len(benign) >= 2:
-                ai_verdict = "false_positive"
+                ai_verdict = "acknowledge"
             elif ai_confidence >= 0.5:
                 ai_verdict = "escalate"
 
@@ -237,14 +240,14 @@ async def swipe(
     # Map swipe to verdict
     verdict_map = {
         "right": DispositionVerdict.TRUE_POSITIVE,
-        "left": DispositionVerdict.FALSE_POSITIVE,
+        "left": DispositionVerdict.ACKNOWLEDGED,
         "up": DispositionVerdict.UNDETERMINED,
     }
     verdict = verdict_map[body.direction]
 
     message_map = {
         "right": "Confirmed as true positive. Evidence recorded.",
-        "left": "Marked as false positive. Pattern noted.",
+        "left": "Acknowledged. AI will re-evaluate hourly.",
         "up": "Escalated for deeper investigation.",
     }
 
@@ -715,7 +718,7 @@ async def set_tol(body: ToleranceIn):
 
 class AutoTriageOut(BaseModel):
     processed: int
-    auto_dismissed: int
+    auto_acknowledged: int
     auto_confirmed: int
     tickets_created: int
     remaining: int
@@ -737,15 +740,15 @@ async def auto_triage(
     result = await session.execute(stmt)
     alerts = result.scalars().all()
 
-    auto_dismissed = 0
+    auto_acknowledged = 0
     auto_confirmed = 0
     tickets_created = 0
 
     for alert in alerts:
         ar = await maybe_auto_dispose(alert, alert.llm_triage, session)
         if ar.auto_handled:
-            if ar.verdict == "false_positive":
-                auto_dismissed += 1
+            if ar.verdict in ("acknowledged", "false_positive"):
+                auto_acknowledged += 1
             elif ar.verdict == "true_positive":
                 auto_confirmed += 1
                 if ar.ticket_created:
@@ -761,11 +764,29 @@ async def auto_triage(
 
     return AutoTriageOut(
         processed=len(alerts),
-        auto_dismissed=auto_dismissed,
+        auto_acknowledged=auto_acknowledged,
         auto_confirmed=auto_confirmed,
         tickets_created=tickets_created,
         remaining=remaining,
     )
+
+
+# ---------------------------------------------------------------------------
+# Re-evaluation — manually trigger re-check of acknowledged alerts
+# ---------------------------------------------------------------------------
+
+
+class ReevalOut(BaseModel):
+    reviewed: int
+    promoted: int
+
+
+@router.post("/reeval", response_model=ReevalOut)
+async def trigger_reeval() -> ReevalOut:
+    """Manually trigger re-evaluation of acknowledged alerts."""
+    from kahu.services.triage.reeval import run_reeval_cycle
+    stats = await run_reeval_cycle()
+    return ReevalOut(**stats)
 
 
 def _ticket_out(t: Ticket) -> TicketOut:

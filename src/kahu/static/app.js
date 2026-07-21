@@ -144,14 +144,15 @@ function renderFeed() {
     // AI verdict badge
     const verdictLabels = {
       true_positive: { text: 'AI: Confirm', cls: 'ai-confirm', arrow: '→' },
-      false_positive: { text: 'AI: Dismiss', cls: 'ai-dismiss', arrow: '←' },
+      acknowledge: { text: 'AI: Acknowledge', cls: 'ai-dismiss', arrow: '←' },
+      false_positive: { text: 'AI: Acknowledge', cls: 'ai-dismiss', arrow: '←' },
       escalate: { text: 'AI: Escalate', cls: 'ai-escalate', arrow: '↑' },
     };
     const aiV = card.ai_verdict && verdictLabels[card.ai_verdict];
     const confidencePct = Math.round((card.ai_confidence || 0) * 100);
 
     el.innerHTML = `
-      <div class="swipe-overlay left">FALSE POS</div>
+      <div class="swipe-overlay left">ACKNOWLEDGE</div>
       <div class="swipe-overlay right">CONFIRM</div>
       <div class="swipe-overlay up">ESCALATE</div>
       <div class="card-top-row">
@@ -173,7 +174,7 @@ function renderFeed() {
         </div>
       ` : ''}
       <div class="card-buttons">
-        <button class="card-btn btn-fp" onclick="event.stopPropagation();doSwipe(feedCards.find(c=>c.id==='${card.id}'),'left')">Dismiss</button>
+        <button class="card-btn btn-fp" onclick="event.stopPropagation();doSwipe(feedCards.find(c=>c.id==='${card.id}'),'left')">Acknowledge</button>
         <button class="card-btn btn-esc" onclick="event.stopPropagation();doSwipe(feedCards.find(c=>c.id==='${card.id}'),'up')">Escalate</button>
         <button class="card-btn btn-tp" onclick="event.stopPropagation();doSwipe(feedCards.find(c=>c.id==='${card.id}'),'right')">Confirm</button>
       </div>
@@ -588,7 +589,7 @@ async function runAutoTriage() {
       <div class="auto-triage-stats">
         <span>${data.processed} processed</span>
         <span style="color:var(--text-dim)">·</span>
-        <span style="color:var(--green)">${data.auto_dismissed} dismissed</span>
+        <span style="color:var(--green)">${data.auto_acknowledged} acknowledged</span>
         <span style="color:var(--text-dim)">·</span>
         <span style="color:var(--yellow)">${data.auto_confirmed} confirmed</span>
         <span style="color:var(--text-dim)">·</span>

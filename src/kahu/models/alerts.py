@@ -20,7 +20,8 @@ class Severity(str, enum.Enum):
 
 class DispositionVerdict(str, enum.Enum):
     TRUE_POSITIVE = "true_positive"
-    FALSE_POSITIVE = "false_positive"
+    ACKNOWLEDGED = "acknowledged"
+    FALSE_POSITIVE = "false_positive"  # legacy — maps to ACKNOWLEDGED
     BENIGN_TRUE_POSITIVE = "benign_true_positive"
     UNDETERMINED = "undetermined"
 

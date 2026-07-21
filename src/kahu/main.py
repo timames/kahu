@@ -11,17 +11,20 @@ from kahu.config import settings
 from kahu.api import router as api_router
 from kahu.db import engine
 from kahu.services.triage.poller import run_poller
+from kahu.services.triage.reeval import start_reeval_loop, stop_reeval_loop
 
 STATIC_DIR = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    # Startup — launch the Wazuh alert poller
+    # Startup — launch the Wazuh alert poller and re-eval loop
     poller_task = asyncio.create_task(run_poller(interval=15.0))
+    await start_reeval_loop()
     yield
     # Shutdown
     poller_task.cancel()
+    await stop_reeval_loop()
     await engine.dispose()
 
 
