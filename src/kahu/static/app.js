@@ -172,6 +172,11 @@ function renderFeed() {
           <ul>${actions.map(a => `<li>${escHtml(a)}</li>`).join('')}</ul>
         </div>
       ` : ''}
+      <div class="card-buttons">
+        <button class="card-btn btn-fp" onclick="event.stopPropagation();doSwipe(feedCards.find(c=>c.id==='${card.id}'),'left')">Dismiss</button>
+        <button class="card-btn btn-esc" onclick="event.stopPropagation();doSwipe(feedCards.find(c=>c.id==='${card.id}'),'up')">Escalate</button>
+        <button class="card-btn btn-tp" onclick="event.stopPropagation();doSwipe(feedCards.find(c=>c.id==='${card.id}'),'right')">Confirm</button>
+      </div>
     `;
 
     if (i === 0) setupSwipe(el, card);
