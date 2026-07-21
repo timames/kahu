@@ -67,22 +67,6 @@ async def get_briefing(session: AsyncSession = Depends(get_session)) -> dict:
             f"Most recent critical alert: \"{latest_critical[0]}\" on host {latest_critical[1] or 'unknown'} at {latest_critical[2]}."
         )
 
-    # Get real vuln data from DB
-    try:
-        from kahu.models.vulnerabilities import VulnFinding, FindingStatus
-        vuln_result = await session.execute(
-            select(VulnFinding.severity, func.count())
-            .where(VulnFinding.status == FindingStatus.OPEN)
-            .group_by(VulnFinding.severity)
-        )
-        vuln_counts = {row[0]: row[1] for row in vuln_result.all()}
-        total_vulns = sum(vuln_counts.values())
-        if total_vulns > 0:
-            crit_vulns = vuln_counts.get("critical", 0)
-            context_parts.append(f"Vulnerability posture: {total_vulns} open findings ({crit_vulns} critical).")
-    except Exception:
-        pass
-
     context = " ".join(context_parts)
     prompt = f"Security context: {context}\n\nGive the analyst their shift briefing."
 

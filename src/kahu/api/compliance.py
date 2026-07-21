@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kahu.db import get_session
 from kahu.models.alerts import Alert
 from kahu.models.compliance import ComplianceProfile
-from kahu.models.connectors import ConnectorInstance, ConnectorStatus
 
 router = APIRouter()
 
@@ -265,20 +264,7 @@ async def get_coverage(
         if row:
             alert_tags.update(row)
 
-    # Gather tags from active connectors
-    conn_result = await session.execute(
-        select(ConnectorInstance.control_tags).where(
-            ConnectorInstance.status == ConnectorStatus.ACTIVE,
-            ConnectorInstance.control_tags.isnot(None),
-        )
-    )
-    connector_tags = set()
-    for row in conn_result.scalars().all():
-        if row:
-            connector_tags.update(row)
-
-    # Merge all evidence sources
-    all_evidence_tags = alert_tags | connector_tags
+    all_evidence_tags = alert_tags
 
     families = []
     total_controls = 0
