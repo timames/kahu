@@ -161,7 +161,6 @@ FRAMEWORKS = {
             ]},
         },
     },
-    },
     "soc2_type2": {
         "name": "SOC 2 Type II",
         "description": "Service Organization Control 2 — Trust Services Criteria",

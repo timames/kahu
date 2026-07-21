@@ -15,7 +15,7 @@ function navigate(screen) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('screen-' + screen).classList.add('active');
-  document.querySelector(`nav button[data-screen="${screen}"]`).classList.add('active');
+  document.querySelector(`nav button[data-screen="${screen}"]`)?.classList.add('active');
   currentScreen = screen;
 
   // Load data for screen
