@@ -581,6 +581,16 @@ class TicketOut(BaseModel):
     created_at: datetime
 
 
+class TicketDetailOut(TicketOut):
+    notes: str | None = None
+    alert_rule_id: str | None = None
+    alert_rule_description: str | None = None
+    alert_agent_name: str | None = None
+    alert_llm_explanation: str | None = None
+    alert_recommended_actions: list[str] = []
+    alert_enrichment: dict | None = None
+
+
 class TicketCloseIn(BaseModel):
     analyst: str = Field(default="mobile-user", min_length=1, max_length=255)
     resolution_notes: str = Field(default="", max_length=2000)
@@ -649,6 +659,60 @@ async def close_ticket(
         xp_earned=xp_amount,
         message=f"Ticket closed. +{xp_amount} XP!",
     )
+
+
+@router.get("/tickets/{ticket_id}", response_model=TicketDetailOut)
+async def get_ticket(
+    ticket_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> TicketDetailOut:
+    """Get full ticket detail including linked alert data."""
+    from sqlalchemy.orm import selectinload
+    stmt = select(Ticket).options(selectinload(Ticket.alert)).where(Ticket.id == ticket_id)
+    result = await session.execute(stmt)
+    ticket = result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(404, "Ticket not found")
+    alert = ticket.alert
+    return TicketDetailOut(
+        **_ticket_out(ticket).model_dump(),
+        notes=ticket.resolution_notes,
+        alert_rule_id=alert.rule_id if alert else None,
+        alert_rule_description=alert.rule_description if alert else None,
+        alert_agent_name=alert.agent_name if alert else None,
+        alert_llm_explanation=(alert.llm_triage or {}).get("explanation") if alert else None,
+        alert_recommended_actions=(alert.llm_triage or {}).get("recommended_actions", []) if alert else [],
+        alert_enrichment=alert.enrichment if alert else None,
+    )
+
+
+class TicketUpdateIn(BaseModel):
+    title: str | None = None
+    notes: str | None = None
+    status: str | None = Field(None, pattern="^(open|in_progress|closed)$")
+    assigned_to: str | None = None
+
+
+@router.patch("/tickets/{ticket_id}")
+async def update_ticket(
+    ticket_id: uuid.UUID,
+    body: TicketUpdateIn,
+    session: AsyncSession = Depends(get_session),
+):
+    """Update ticket fields."""
+    ticket = await session.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(404, "Ticket not found")
+    if body.title is not None:
+        ticket.title = body.title
+    if body.notes is not None:
+        ticket.resolution_notes = body.notes
+    if body.status is not None:
+        ticket.status = TicketStatus(body.status)
+    if body.assigned_to is not None:
+        ticket.assigned_to = body.assigned_to
+    await session.commit()
+    return _ticket_out(ticket)
 
 
 @router.patch("/tickets/{ticket_id}/assign")

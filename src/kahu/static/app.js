@@ -435,12 +435,12 @@ async function loadScore() {
           const typeLabel = isInv ? 'INV' : 'INC';
           const typeColor = isInv ? 'var(--yellow)' : 'var(--red)';
           return `
-          <div class="ticket-table-row">
+          <div class="ticket-table-row" onclick="openTicket('${t.id}')" style="cursor:pointer">
             <span class="tt-type" style="color:${typeColor};font-weight:600">${typeLabel}</span>
             <span class="tt-sev"><span class="card-sev ${t.severity}" style="font-size:10px;padding:1px 5px">${t.severity}</span></span>
             <span class="tt-title">${escHtml(t.title).substring(0, 50)}</span>
             <span class="tt-time">${formatTimeAgo(new Date(t.created_at))}</span>
-            <span class="tt-action"><button class="ticket-close-btn" onclick="closeTicket('${t.id}')">Close</button></span>
+            <span class="tt-action"><button class="ticket-close-btn" onclick="event.stopPropagation();closeTicket('${t.id}')">Close</button></span>
           </div>`;
         }).join('')}
       </div>`;
@@ -450,14 +450,14 @@ async function loadScore() {
       const typeLabel = isInvestigation ? 'Investigation' : 'Incident';
       const typeColor = isInvestigation ? 'var(--yellow)' : 'var(--red)';
       return `
-      <div class="ticket-card">
+      <div class="ticket-card" onclick="openTicket('${t.id}')" style="cursor:pointer">
         <div class="ticket-sev ${t.severity}"></div>
         <div class="ticket-info">
           <div class="ticket-type" style="color:${typeColor};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">${typeLabel}</div>
           <div class="ticket-title">${escHtml(t.title)}</div>
           <div class="ticket-meta">${escHtml(t.severity)} · ${formatTimeAgo(new Date(t.created_at))}</div>
         </div>
-        <button class="ticket-close-btn" onclick="closeTicket('${t.id}')">Close</button>
+        <button class="ticket-close-btn" onclick="event.stopPropagation();closeTicket('${t.id}')">Close</button>
       </div>`;
     }).join('');
   }
@@ -969,6 +969,117 @@ async function closeTicket(ticketId) {
   }
 }
 
+// ---- Ticket Detail ----
+
+let openTicketId = null;
+
+async function openTicket(ticketId) {
+  openTicketId = ticketId;
+  const modal = document.getElementById('ticket-modal');
+  const content = document.getElementById('ticket-detail-content');
+  content.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  modal.classList.add('active');
+
+  const t = await api(`${API}/tickets/${ticketId}`);
+  if (t._offline || !t.id) {
+    content.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:20px">Could not load ticket.</p>';
+    return;
+  }
+
+  const isInv = t.ticket_type === 'investigation';
+  const typeLabel = isInv ? 'Investigation' : 'Incident';
+  const typeColor = isInv ? 'var(--yellow)' : 'var(--red)';
+  const statusOpts = ['open', 'in_progress', 'closed'].map(s =>
+    `<option value="${s}"${t.status === s ? ' selected' : ''}>${s.replace('_', ' ')}</option>`
+  ).join('');
+
+  content.innerHTML = `
+    <div class="td-header">
+      <span class="td-type" style="color:${typeColor}">${typeLabel}</span>
+      <span class="card-sev ${t.severity}">${t.severity}</span>
+    </div>
+
+    <div class="td-field">
+      <label>Title</label>
+      <input id="td-title" type="text" value="${escHtml(t.title)}" />
+    </div>
+
+    <div class="td-row">
+      <div class="td-field td-half">
+        <label>Status</label>
+        <select id="td-status">${statusOpts}</select>
+      </div>
+      <div class="td-field td-half">
+        <label>Assigned to</label>
+        <input id="td-assigned" type="text" value="${escHtml(t.assigned_to)}" />
+      </div>
+    </div>
+
+    <div class="td-field">
+      <label>Notes</label>
+      <textarea id="td-notes" rows="3" placeholder="Add investigation notes...">${escHtml(t.notes || '')}</textarea>
+    </div>
+
+    ${t.alert_llm_explanation ? `
+    <div class="td-section">
+      <h4>AI Analysis</h4>
+      <p class="td-explanation">${escHtml(t.alert_llm_explanation)}</p>
+    </div>` : ''}
+
+    ${t.alert_recommended_actions && t.alert_recommended_actions.length ? `
+    <div class="td-section">
+      <h4>Recommended Actions</h4>
+      <ul class="td-actions">${t.alert_recommended_actions.map(a => `<li>${escHtml(a)}</li>`).join('')}</ul>
+    </div>` : ''}
+
+    <div class="td-section">
+      <h4>Alert Details</h4>
+      <div class="td-meta-grid">
+        ${t.alert_rule_id ? `<div class="td-meta-item"><span class="td-meta-key">Rule ID</span><span class="td-meta-val">${escHtml(t.alert_rule_id)}</span></div>` : ''}
+        ${t.alert_rule_description ? `<div class="td-meta-item"><span class="td-meta-key">Rule</span><span class="td-meta-val">${escHtml(t.alert_rule_description)}</span></div>` : ''}
+        ${t.alert_agent_name ? `<div class="td-meta-item"><span class="td-meta-key">Agent</span><span class="td-meta-val">${escHtml(t.alert_agent_name)}</span></div>` : ''}
+        <div class="td-meta-item"><span class="td-meta-key">Created</span><span class="td-meta-val">${new Date(t.created_at).toLocaleString()}</span></div>
+      </div>
+    </div>
+
+    ${t.alert_enrichment ? `
+    <div class="td-section">
+      <h4>Enrichment</h4>
+      <div class="td-enrichment">${Object.entries(t.alert_enrichment).map(([k,v]) =>
+        `<div class="td-meta-item"><span class="td-meta-key">${escHtml(k)}</span><span class="td-meta-val">${escHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</span></div>`
+      ).join('')}</div>
+    </div>` : ''}
+
+    <div class="td-buttons">
+      <button class="td-save-btn" onclick="saveTicket('${t.id}')">Save Changes</button>
+      <button class="td-close-btn" onclick="closeTicketModal()">Cancel</button>
+    </div>
+  `;
+}
+
+async function saveTicket(ticketId) {
+  const title = document.getElementById('td-title').value.trim();
+  const status = document.getElementById('td-status').value;
+  const assigned_to = document.getElementById('td-assigned').value.trim();
+  const notes = document.getElementById('td-notes').value;
+
+  try {
+    await api(`${API}/tickets/${ticketId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title, status, assigned_to, notes }),
+    });
+    closeTicketModal();
+    if (currentScreen === 'score') loadScore();
+  } catch (e) {
+    alert(e.message || 'Failed to save ticket');
+  }
+}
+
+function closeTicketModal() {
+  document.getElementById('ticket-modal').classList.remove('active');
+  openTicketId = null;
+}
+
 // ---- Sources Screen ----
 
 let connectorCatalog = null;
@@ -1458,6 +1569,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (modal) {
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeCoach();
+    });
+  }
+  const ticketModal = document.getElementById('ticket-modal');
+  if (ticketModal) {
+    ticketModal.addEventListener('click', (e) => {
+      if (e.target === ticketModal) closeTicketModal();
     });
   }
   const evModal = document.getElementById('evidence-modal');

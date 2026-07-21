@@ -1763,6 +1763,159 @@ nav .badge {
   color: var(--text-dim);
 }
 
+/* ── Ticket Detail Modal ───────────────────────── */
+
+.ticket-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.td-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.td-type {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.td-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.td-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.td-field input,
+.td-field select,
+.td-field textarea {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--text-bright);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+.td-field input:focus,
+.td-field select:focus,
+.td-field textarea:focus {
+  border-color: var(--accent);
+}
+.td-field textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.td-row {
+  display: flex;
+  gap: 12px;
+}
+.td-half {
+  flex: 1;
+}
+
+.td-section {
+  padding-top: 4px;
+}
+.td-section h4 {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.td-explanation {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  background: var(--bg-elevated);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+}
+.td-actions {
+  font-size: 13px;
+  color: var(--text);
+  padding-left: 18px;
+  line-height: 1.6;
+}
+
+.td-meta-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.td-meta-item {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border-radius: 6px;
+}
+.td-meta-key {
+  color: var(--text-dim);
+  min-width: 70px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.td-meta-val {
+  color: var(--text-bright);
+  word-break: break-word;
+}
+
+.td-enrichment {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.td-buttons {
+  display: flex;
+  gap: 10px;
+  padding-top: 8px;
+}
+.td-save-btn {
+  flex: 1;
+  padding: 12px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.td-close-btn {
+  flex: 1;
+  padding: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* ── Compliance Screen ─────────────────────────── */
 
 .comp-header {
