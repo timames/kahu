@@ -20,6 +20,7 @@ function navigate(screen) {
   if (screen === 'glance') loadGlance();
   if (screen === 'feed') loadFeed();
   if (screen === 'score') loadScore();
+  if (screen === 'profile') loadProfile();
   if (screen === 'settings') loadSettings();
 }
 
@@ -430,6 +431,168 @@ async function loadGlanceBadge() {
   } catch { /* silent */ }
 }
 
+// ---- Themes ----
+
+const THEMES = [
+  { id: 'cyber',   name: 'Cyber',   colors: ['#00ffc8','#0a0e17','#00b894'], tag: 'free' },
+  { id: 'lava',    name: 'Lava',    colors: ['#ff4d4d','#1a0a0a','#ff6b35'], tag: 'free' },
+  { id: 'ocean',   name: 'Ocean',   colors: ['#0ea5e9','#0a1628','#06b6d4'], tag: 'free' },
+  { id: 'stealth', name: 'Stealth', colors: ['#a0a0a0','#111111','#666666'], tag: 'free' },
+  { id: 'sakura',  name: 'Sakura',  colors: ['#f472b6','#1a0a14','#e879a8'], tag: 'free' },
+  { id: 'aurora',  name: 'Aurora',  colors: ['#a78bfa','#0a0e17','#34d399'], tag: 'free' },
+];
+
+// ---- Avatars ----
+
+const AVATARS = [
+  { id: 'shield',    emoji: '🛡️', name: 'Shield',    unlock: null },
+  { id: 'hawk',      emoji: '🦅', name: 'Hawk',      unlock: null },
+  { id: 'wolf',      emoji: '🐺', name: 'Wolf',      unlock: null },
+  { id: 'dragon',    emoji: '🐉', name: 'Dragon',    unlock: 'Reach Sentinel rank' },
+  { id: 'phoenix',   emoji: '🔥', name: 'Phoenix',   unlock: 'Reach Commander rank' },
+  { id: 'guardian',  emoji: '⚔️', name: 'Guardian',  unlock: 'Reach Warden rank' },
+  { id: 'owl',       emoji: '🦉', name: 'Owl',       unlock: '50 alerts triaged' },
+  { id: 'lightning', emoji: '⚡', name: 'Lightning', unlock: '7-day streak' },
+];
+
+// ---- Ranks ----
+
+const RANKS = [
+  { name: 'Recruit',   minXp: 0,    badge: '🔰' },
+  { name: 'Guardian',  minXp: 100,  badge: '🛡️' },
+  { name: 'Sentinel',  minXp: 300,  badge: '⚔️' },
+  { name: 'Commander', minXp: 700,  badge: '🎖️' },
+  { name: 'Warden',    minXp: 1500, badge: '👑' },
+];
+
+function getRank(xp) {
+  let rank = RANKS[0];
+  for (const r of RANKS) {
+    if (xp >= r.minXp) rank = r;
+  }
+  return rank;
+}
+
+function getNextRank(xp) {
+  for (const r of RANKS) {
+    if (xp < r.minXp) return r;
+  }
+  return null;
+}
+
+// ---- Profile Screen ----
+
+async function loadProfile() {
+  const data = await api(`${API}/score?analyst=${encodeURIComponent(getAnalystName())}`);
+  if (data._offline) return;
+
+  // XP derived from score data (deterministic, no accumulation bug)
+  const totalXp = (data.alerts_handled_today || 0) * 10 + (data.streak_days || 0) * 25 + (data.score || 0) * 2;
+
+  const rank = getRank(totalXp);
+  const next = getNextRank(totalXp);
+
+  // Name & rank
+  document.getElementById('profile-name').textContent = getAnalystName();
+  document.getElementById('profile-rank-title').textContent = rank.name;
+  document.getElementById('profile-rank-badge').textContent = rank.badge;
+
+  // XP bar
+  if (next) {
+    const progress = (totalXp - rank.minXp) / (next.minXp - rank.minXp);
+    document.getElementById('profile-xp-fill').style.width = (progress * 100) + '%';
+    document.getElementById('profile-xp-label').textContent = `${totalXp} / ${next.minXp} XP`;
+  } else {
+    document.getElementById('profile-xp-fill').style.width = '100%';
+    document.getElementById('profile-xp-label').textContent = `${totalXp} XP — Max Rank`;
+  }
+
+  // Avatar
+  const savedAvatar = localStorage.getItem('kahu_avatar') || 'shield';
+  const currentAvatar = AVATARS.find(a => a.id === savedAvatar) || AVATARS[0];
+  document.getElementById('profile-avatar').textContent = currentAvatar.emoji;
+
+  // Render avatar grid
+  const avatarGrid = document.getElementById('avatar-grid');
+  avatarGrid.innerHTML = AVATARS.map(a => {
+    const locked = a.unlock && !isAvatarUnlocked(a, rank, data);
+    return `<div class="avatar-option ${a.id === savedAvatar ? 'selected' : ''} ${locked ? 'locked' : ''}"
+                 onclick="${locked ? '' : `selectAvatar('${a.id}')`}"
+                 title="${locked ? a.unlock : a.name}">
+              <span class="avatar-emoji">${a.emoji}</span>
+              <span class="avatar-name">${a.name}</span>
+              ${locked ? '<span class="avatar-lock">🔒</span>' : ''}
+            </div>`;
+  }).join('');
+
+  // Render skin grid
+  const skinGrid = document.getElementById('skin-grid');
+  const savedTheme = localStorage.getItem('kahu_theme') || 'cyber';
+  skinGrid.innerHTML = THEMES.map(t => {
+    const swatch = t.colors.map(c => `<span style="background:${c};width:12px;height:12px;border-radius:50%;display:inline-block"></span>`).join('');
+    return `<div class="skin-option ${t.id === savedTheme ? 'selected' : ''}"
+                 onclick="selectTheme('${t.id}')">
+              <div class="skin-preview">${swatch}</div>
+              <span class="skin-name">${t.name}</span>
+              <span class="skin-tag free">Free</span>
+            </div>`;
+  }).join('');
+
+  // Render badges
+  const badgeContainer = document.getElementById('profile-badges');
+  if (data.badges && data.badges.length > 0) {
+    badgeContainer.innerHTML = data.badges.map(b =>
+      `<div class="badge-item-enhanced">
+        <span class="badge-icon">${getBadgeIcon(b.name)}</span>
+        <div><strong>${escHtml(b.name)}</strong><br><small style="color:var(--text-dim)">${escHtml(b.description)}</small></div>
+      </div>`
+    ).join('');
+  } else {
+    badgeContainer.innerHTML = '<p style="color:var(--text-dim);font-size:14px">Triage alerts to earn badges</p>';
+  }
+}
+
+function isAvatarUnlocked(avatar, rank, scoreData) {
+  if (!avatar.unlock) return true;
+  const u = avatar.unlock.toLowerCase();
+  if (u.includes('sentinel') && RANKS.indexOf(rank) >= 2) return true;
+  if (u.includes('commander') && RANKS.indexOf(rank) >= 3) return true;
+  if (u.includes('warden') && RANKS.indexOf(rank) >= 4) return true;
+  if (u.includes('50 alerts') && (scoreData.alerts_handled_today || 0) >= 50) return true;
+  if (u.includes('7-day') && (scoreData.streak_days || 0) >= 7) return true;
+  return false;
+}
+
+function selectAvatar(id) {
+  localStorage.setItem('kahu_avatar', id);
+  const avatar = AVATARS.find(a => a.id === id) || AVATARS[0];
+  document.getElementById('profile-avatar').textContent = avatar.emoji;
+  // Update selection state
+  document.querySelectorAll('.avatar-option').forEach(el => el.classList.remove('selected'));
+  const clicked = [...document.querySelectorAll('.avatar-option')].find(el => el.querySelector('.avatar-name')?.textContent === avatar.name);
+  if (clicked) clicked.classList.add('selected');
+}
+
+function selectTheme(id) {
+  localStorage.setItem('kahu_theme', id);
+  document.documentElement.setAttribute('data-theme', id);
+  // Update selection state
+  document.querySelectorAll('.skin-option').forEach(el => el.classList.remove('selected'));
+  const clicked = [...document.querySelectorAll('.skin-option')].find(el => el.querySelector('.skin-name')?.textContent === THEMES.find(t => t.id === id)?.name);
+  if (clicked) clicked.classList.add('selected');
+}
+
+function getBadgeIcon(name) {
+  const n = name.toLowerCase();
+  if (n.includes('first')) return '🎯';
+  if (n.includes('streak')) return '🔥';
+  if (n.includes('speed')) return '⚡';
+  if (n.includes('night')) return '🌙';
+  if (n.includes('perfect')) return '💎';
+  if (n.includes('volume')) return '📊';
+  return '🏅';
+}
+
 // ---- Utilities ----
 
 function escHtml(s) {
@@ -476,6 +639,17 @@ document.addEventListener('DOMContentLoaded', () => {
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeCoach();
     });
+  }
+
+  // Apply saved theme
+  const savedTheme = localStorage.getItem('kahu_theme');
+  if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+
+  // Apply saved analyst name
+  const savedName = localStorage.getItem('kahu_analyst');
+  if (savedName) {
+    const nameInput = document.getElementById('analyst-name');
+    if (nameInput) nameInput.value = savedName;
   }
 
   // Load initial screen
