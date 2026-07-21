@@ -705,6 +705,39 @@ function setStatus(id, ok) {
   el.querySelector('.settings-item-value span').textContent = ok ? 'Connected' : 'Offline';
 }
 
+async function refreshServices() {
+  const btn = document.querySelector('.service-refresh-btn');
+  btn.disabled = true;
+  btn.querySelector('svg').style.animation = 'spin 1s linear infinite';
+  await loadSettings();
+  btn.disabled = false;
+  btn.querySelector('svg').style.animation = '';
+}
+
+async function restartService(service) {
+  const btns = document.querySelectorAll('.service-action-btn');
+  const btn = [...btns].find(b => b.textContent.toLowerCase().includes(service === 'reeval' ? 're-eval' : service));
+  if (btn) { btn.disabled = true; btn.textContent = 'Restarting...'; }
+
+  try {
+    const result = await api(`${TRIAGE_API}/restart/${service}`, { method: 'POST' });
+    if (result.status === 'ok') {
+      showXpToast(0, result.message);
+    } else {
+      alert(result.message || 'Failed');
+    }
+  } catch (e) {
+    alert(e.message || 'Failed');
+  }
+
+  // Refresh status after restart
+  await loadSettings();
+  if (btn) { btn.disabled = false; }
+  // Restore button text
+  const labels = { wazuh: 'Restart Wazuh', pipeline: 'Restart Pipeline', reeval: 'Run Re-evaluation' };
+  if (btn) btn.textContent = labels[service] || service;
+}
+
 // ---- Glance badge (lightweight, for nav) ----
 
 async function loadGlanceBadge() {

@@ -222,6 +222,15 @@
         <span class="settings-item-label">Triage Pipeline</span>
         <span class="settings-item-value"><span>Checking...</span><div class="status-dot"></div></span>
       </div>
+      <button class="service-refresh-btn" onclick="refreshServices()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Refresh Status
+      </button>
+      <div id="service-restart-actions" class="service-actions">
+        <button class="service-action-btn" onclick="restartService('wazuh')">Restart Wazuh</button>
+        <button class="service-action-btn" onclick="restartService('pipeline')">Restart Pipeline</button>
+        <button class="service-action-btn" onclick="restartService('reeval')">Run Re-evaluation</button>
+      </div>
     </div>
 
     <div class="settings-group">

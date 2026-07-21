@@ -191,6 +191,36 @@ async def pipeline_status() -> PipelineStatusResponse:
     )
 
 
+@router.post("/restart/{service}")
+async def restart_service(service: str):
+    """Restart a service component."""
+    if service == "wazuh":
+        # Re-authenticate to Wazuh to reset connection
+        client = WazuhAPIClient()
+        try:
+            await client.authenticate()
+            return {"status": "ok", "message": "Wazuh connection re-established"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+    elif service == "pipeline":
+        # Restart the poller task
+        from kahu.services.triage.poller import restart_poller
+        try:
+            await restart_poller()
+            return {"status": "ok", "message": "Pipeline restarted"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+    elif service == "reeval":
+        from kahu.services.triage.reeval import run_reeval_cycle
+        try:
+            stats = await run_reeval_cycle()
+            return {"status": "ok", "message": f"Re-evaluated {stats['reviewed']} alerts, promoted {stats['promoted']}"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+    else:
+        return {"status": "error", "message": f"Unknown service: {service}"}
+
+
 def _to_summary(alert: Alert) -> AlertSummary:
     llm = alert.llm_triage or {}
     return AlertSummary(

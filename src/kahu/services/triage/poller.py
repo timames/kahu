@@ -78,12 +78,34 @@ async def poll_once() -> int:
             return 0
 
 
+_poller_task: asyncio.Task | None = None
+
+
 async def run_poller(interval: float = 15.0) -> None:
     """Run the poller loop forever, polling every `interval` seconds."""
+    global _poller_task
+    _poller_task = asyncio.current_task()
     log.info("poller: starting (interval=%.1fs)", interval)
     while True:
         try:
             await poll_once()
+        except asyncio.CancelledError:
+            log.info("poller: stopped")
+            break
         except Exception as exc:
             log.error("poller: unexpected error: %s", exc)
         await asyncio.sleep(interval)
+
+
+async def restart_poller(interval: float = 15.0) -> None:
+    """Cancel and restart the poller task."""
+    global _poller_task, _last_timestamp
+    if _poller_task is not None:
+        _poller_task.cancel()
+        try:
+            await _poller_task
+        except asyncio.CancelledError:
+            pass
+    _last_timestamp = None
+    _poller_task = asyncio.create_task(run_poller(interval))
+    log.info("poller: restarted")
