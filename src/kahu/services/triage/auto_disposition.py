@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
@@ -82,15 +83,27 @@ async def maybe_auto_dispose(
     if tolerance == 1 and severity == "critical":
         return AutoDispositionResult()
 
+    # Query rule disposition history for statistical signal
+    rule_fp_rate = await _get_rule_fp_rate(alert.rule_id, session)
+
     # Infer verdict from data when no explicit recommendation
     if not ai_verdict:
-        ai_verdict = _infer_verdict(confidence, benign, severity, llm_severity)
+        ai_verdict = _infer_verdict(confidence, benign, severity, llm_severity, rule_fp_rate)
 
     # Check for auto-dismiss (false positive)
     if ai_verdict == "false_positive":
-        # For inferred verdicts, use (1 - confidence) as dismiss confidence
-        # since low confidence = likely benign
-        dismiss_conf = confidence if llm_output.get("recommended_verdict") == "false_positive" else max(1 - confidence, len(benign) * 0.3)
+        # Compute dismiss confidence by combining available signals
+        if llm_output.get("recommended_verdict") == "false_positive":
+            dismiss_conf = confidence
+        else:
+            # LLM-derived FP confidence (inverted — low threat = high FP)
+            llm_fp_conf = max(1 - confidence, len(benign) * 0.3)
+            if rule_fp_rate is not None and rule_fp_rate >= 0.5:
+                # Both history and LLM agree it's likely FP — combine signals.
+                # Use "noisy-OR": P(FP) = 1 - (1-history)(1-llm)
+                dismiss_conf = 1 - (1 - rule_fp_rate) * (1 - llm_fp_conf)
+            else:
+                dismiss_conf = llm_fp_conf
         if dismiss_conf >= dismiss_threshold:
             await record_disposition(
                 alert_id=alert.id,
@@ -138,16 +151,29 @@ async def maybe_auto_dispose(
     return AutoDispositionResult()
 
 
-def _infer_verdict(confidence: float, benign: list, severity: str, llm_severity: str | None) -> str | None:
-    """Infer verdict from LLM data when no explicit recommendation exists.
+def _infer_verdict(
+    confidence: float,
+    benign: list,
+    severity: str,
+    llm_severity: str | None,
+    rule_fp_rate: float | None = None,
+) -> str | None:
+    """Infer verdict from LLM data and disposition history.
 
-    Logic:
-    - Low confidence + multiple benign explanations → false positive
-    - Low severity + low confidence → false positive
-    - High confidence + no benign + high severity → true positive
-    - Everything else → escalate (stays in human queue)
+    History is the strongest signal — if a rule is consistently FP, new
+    instances of the same rule are almost certainly FP too.
     """
-    # Strong false positive signals
+    # Disposition history — strongest signal
+    if rule_fp_rate is not None and rule_fp_rate >= 0.6:
+        # 60%+ FP rate: dismiss unless LLM is highly confident it's real
+        if confidence < 0.85 or len(benign) >= 1:
+            return "false_positive"
+    if rule_fp_rate is not None and rule_fp_rate >= 0.5:
+        # 50%+ FP rate with any benign explanation or moderate confidence
+        if len(benign) >= 1 or confidence <= 0.7:
+            return "false_positive"
+
+    # Strong false positive signals (original logic)
     if len(benign) >= 2 and confidence <= 0.5:
         return "false_positive"
     if confidence <= 0.3 and severity in ("low", "info"):
@@ -166,3 +192,38 @@ def _infer_verdict(confidence: float, benign: list, severity: str, llm_severity:
         return "false_positive"
 
     return None  # Uncertain — human reviews
+
+
+async def _get_rule_fp_rate(rule_id: str, session: AsyncSession) -> float | None:
+    """Get false-positive rate for a rule from disposition history.
+
+    Returns None if no history exists (< 5 dispositions).
+    """
+    if not rule_id:
+        return None
+
+    try:
+        total_stmt = (
+            select(func.count())
+            .select_from(Alert)
+            .join(AlertDisposition, AlertDisposition.alert_id == Alert.id)
+            .where(Alert.rule_id == rule_id)
+        )
+        total = await session.scalar(total_stmt) or 0
+
+        if total < 5:
+            return None
+
+        fp_stmt = (
+            select(func.count())
+            .select_from(Alert)
+            .join(AlertDisposition, AlertDisposition.alert_id == Alert.id)
+            .where(Alert.rule_id == rule_id)
+            .where(AlertDisposition.verdict == DispositionVerdict.FALSE_POSITIVE)
+        )
+        fp_count = await session.scalar(fp_stmt) or 0
+
+        return round(fp_count / total, 2)
+    except Exception:
+        logger.warning("Failed to query rule FP rate", exc_info=True)
+        return None
