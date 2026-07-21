@@ -307,17 +307,24 @@ async function doSwipe(card, direction) {
 // ---- Ticket Confirmation Modal ----
 
 function showTicketConfirmation(result, card, direction) {
-  const action = direction === 'up' ? 'Escalated' : 'Confirmed';
-  const actionColor = direction === 'up' ? 'var(--yellow)' : 'var(--red)';
+  const isEscalate = direction === 'up';
+  const typeLabel = isEscalate ? 'Investigation' : 'Incident';
+  const typeIcon = isEscalate ? '🔍' : '🚨';
+  const actionColor = isEscalate ? 'var(--yellow)' : 'var(--red)';
+  const tipText = isEscalate
+    ? 'This alert needs deeper analysis. Review evidence and close when investigation is complete.'
+    : 'Confirmed threat. Take remediation action, then close the incident ticket.';
+
   const modal = document.getElementById('coach-modal');
-  modal.querySelector('.coach-title').textContent = `Case Opened`;
+  modal.querySelector('.coach-title').textContent = `${typeLabel} Opened`;
   modal.querySelector('.coach-body').innerHTML = `
     <div style="text-align:center;padding:8px 0">
-      <div style="font-size:32px;margin-bottom:8px">📋</div>
-      <div style="color:${actionColor};font-weight:600;font-size:15px;margin-bottom:4px">${action}</div>
+      <div style="font-size:32px;margin-bottom:8px">${typeIcon}</div>
+      <div style="color:${actionColor};font-weight:600;font-size:15px;margin-bottom:4px">${typeLabel}</div>
       <div style="font-size:14px;margin-bottom:12px">${escHtml(card.title).substring(0, 80)}</div>
       <div style="background:var(--card);border-radius:8px;padding:10px;font-size:13px;text-align:left">
-        <div><strong>Severity:</strong> <span class="card-sev ${card.severity}" style="font-size:11px;padding:2px 6px">${card.severity}</span></div>
+        <div><strong>Type:</strong> <span style="color:${actionColor}">${typeLabel}</span></div>
+        <div style="margin-top:4px"><strong>Severity:</strong> <span class="card-sev ${card.severity}" style="font-size:11px;padding:2px 6px">${card.severity}</span></div>
         <div style="margin-top:4px"><strong>Agent:</strong> ${escHtml(card.agent || 'unknown')}</div>
         <div style="margin-top:4px"><strong>Status:</strong> Open — assigned to you</div>
       </div>
@@ -326,7 +333,7 @@ function showTicketConfirmation(result, card, direction) {
       </button>
     </div>
   `;
-  modal.querySelector('.coach-tip-text').textContent = 'Close this ticket from the Score tab when investigation is complete.';
+  modal.querySelector('.coach-tip-text').textContent = tipText;
   modal.querySelector('.coach-controls').innerHTML = '';
   modal.classList.add('active');
 }
@@ -409,18 +416,47 @@ async function loadScore() {
   const tickets = await loadTickets();
   const ticketList = document.getElementById('ticket-list');
   if (!tickets || tickets._offline || tickets.length === 0) {
-    ticketList.innerHTML = '<p style="color:var(--text-dim);font-size:13px;padding:8px 0">No open tickets. Confirm alerts to create tickets.</p>';
+    ticketList.innerHTML = '<p style="color:var(--text-dim);font-size:13px;padding:8px 0">No open tickets. Confirm or escalate alerts to create tickets.</p>';
+  } else if (ticketViewMode === 'table') {
+    ticketList.innerHTML = `
+      <div class="ticket-table">
+        <div class="ticket-table-header">
+          <span class="tt-type">Type</span>
+          <span class="tt-sev">Sev</span>
+          <span class="tt-title">Title</span>
+          <span class="tt-time">Age</span>
+          <span class="tt-action"></span>
+        </div>
+        ${tickets.map(t => {
+          const isInv = t.ticket_type === 'investigation';
+          const typeLabel = isInv ? 'INV' : 'INC';
+          const typeColor = isInv ? 'var(--yellow)' : 'var(--red)';
+          return `
+          <div class="ticket-table-row">
+            <span class="tt-type" style="color:${typeColor};font-weight:600">${typeLabel}</span>
+            <span class="tt-sev"><span class="card-sev ${t.severity}" style="font-size:10px;padding:1px 5px">${t.severity}</span></span>
+            <span class="tt-title">${escHtml(t.title).substring(0, 50)}</span>
+            <span class="tt-time">${formatTimeAgo(new Date(t.created_at))}</span>
+            <span class="tt-action"><button class="ticket-close-btn" onclick="closeTicket('${t.id}')">Close</button></span>
+          </div>`;
+        }).join('')}
+      </div>`;
   } else {
-    ticketList.innerHTML = tickets.map(t => `
+    ticketList.innerHTML = tickets.map(t => {
+      const isInvestigation = t.ticket_type === 'investigation';
+      const typeLabel = isInvestigation ? 'Investigation' : 'Incident';
+      const typeColor = isInvestigation ? 'var(--yellow)' : 'var(--red)';
+      return `
       <div class="ticket-card">
         <div class="ticket-sev ${t.severity}"></div>
         <div class="ticket-info">
+          <div class="ticket-type" style="color:${typeColor};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">${typeLabel}</div>
           <div class="ticket-title">${escHtml(t.title)}</div>
           <div class="ticket-meta">${escHtml(t.severity)} · ${formatTimeAgo(new Date(t.created_at))}</div>
         </div>
         <button class="ticket-close-btn" onclick="closeTicket('${t.id}')">Close</button>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   }
 }
 
@@ -860,6 +896,15 @@ function showXpToast(xp, extra) {
 }
 
 // ---- Tickets ----
+
+let ticketViewMode = 'cards';
+
+function setTicketView(mode) {
+  ticketViewMode = mode;
+  document.getElementById('view-cards').classList.toggle('active', mode === 'cards');
+  document.getElementById('view-table').classList.toggle('active', mode === 'table');
+  if (currentScreen === 'score') loadScore();
+}
 
 async function loadTickets() {
   const data = await api(`${API}/tickets?analyst=${encodeURIComponent(getAnalystName())}`);

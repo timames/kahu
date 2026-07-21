@@ -16,12 +16,20 @@ class TicketStatus(str, enum.Enum):
     CLOSED = "closed"
 
 
+class TicketType(str, enum.Enum):
+    INCIDENT = "incident"       # Confirmed true positive — respond & remediate
+    INVESTIGATION = "investigation"  # Escalated — needs deeper analysis first
+
+
 class Ticket(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "tickets"
 
     alert_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("alerts.id"), unique=True)
     title: Mapped[str] = mapped_column(String(512))
     severity: Mapped[str] = mapped_column(String(20))
+    ticket_type: Mapped[Optional[str]] = mapped_column(
+        String(20), default=TicketType.INCIDENT.value, nullable=True,
+    )
     status: Mapped[TicketStatus] = mapped_column(
         SAEnum(TicketStatus, name="ticket_status"),
         default=TicketStatus.OPEN,

@@ -20,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
-from kahu.models.tickets import Ticket, TicketStatus
+from kahu.models.tickets import Ticket, TicketStatus, TicketType
 from kahu.models.xp import XpEvent
 from kahu.services.triage.disposition import record_disposition
 
@@ -134,6 +134,7 @@ async def maybe_auto_dispose(
             alert_id=alert.id,
             title=alert.rule_description or f"Rule {alert.rule_id}",
             severity=severity,
+            ticket_type=TicketType.INCIDENT.value,
             status=TicketStatus.OPEN,
             assigned_to=AI_ANALYST,
         )

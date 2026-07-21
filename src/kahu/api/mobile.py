@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from kahu.db import get_session
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
-from kahu.models.tickets import Ticket, TicketStatus
+from kahu.models.tickets import Ticket, TicketStatus, TicketType
 from kahu.models.xp import XpEvent
 from kahu.services.triage.disposition import record_disposition
 from kahu.services.triage.auto_disposition import (
@@ -66,6 +66,7 @@ class SwipeOut(BaseModel):
     message: str
     xp_earned: int
     ticket_id: uuid.UUID | None = None
+    ticket_type: str | None = None
 
 
 class ScoreResponse(BaseModel):
@@ -261,11 +262,14 @@ async def swipe(
 
     # If true positive or escalated, create a ticket
     ticket_id = None
+    ttype = None
     if verdict in (DispositionVerdict.TRUE_POSITIVE, DispositionVerdict.UNDETERMINED):
+        ttype = TicketType.INCIDENT if verdict == DispositionVerdict.TRUE_POSITIVE else TicketType.INVESTIGATION
         ticket = Ticket(
             alert_id=alert_id,
             title=alert.rule_description or f"Rule {alert.rule_id}",
             severity=alert.severity.value if isinstance(alert.severity, Severity) else alert.severity,
+            ticket_type=ttype.value,
             status=TicketStatus.OPEN,
             assigned_to=body.analyst,
         )
@@ -281,6 +285,7 @@ async def swipe(
         message=message_map[body.direction],
         xp_earned=1,
         ticket_id=ticket_id,
+        ticket_type=ttype.value if ttype else None,
     )
 
 
@@ -565,6 +570,7 @@ class TicketOut(BaseModel):
     alert_id: uuid.UUID
     title: str
     severity: str
+    ticket_type: str
     status: str
     assigned_to: str
     closed_by: str | None
@@ -768,6 +774,7 @@ def _ticket_out(t: Ticket) -> TicketOut:
         alert_id=t.alert_id,
         title=t.title,
         severity=t.severity,
+        ticket_type=t.ticket_type or "incident",
         status=t.status.value,
         assigned_to=t.assigned_to,
         closed_by=t.closed_by,

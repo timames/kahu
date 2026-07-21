@@ -83,7 +83,13 @@
     </div>
 
     <div class="tickets-section">
-      <h3>Open Tickets <span class="ticket-count" id="ticket-count"></span></h3>
+      <div class="tickets-header">
+        <h3>Open Tickets <span class="ticket-count" id="ticket-count"></span></h3>
+        <div class="tickets-view-toggle">
+          <button class="view-btn active" id="view-cards" onclick="setTicketView('cards')">Cards</button>
+          <button class="view-btn" id="view-table" onclick="setTicketView('table')">Table</button>
+        </div>
+      </div>
       <div id="ticket-list" class="ticket-list"></div>
     </div>
 
