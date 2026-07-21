@@ -487,6 +487,51 @@ function setTolerance(val) {
 
   // Update description
   document.getElementById('tolerance-desc').textContent = info.desc;
+
+  // Sync to backend
+  api(`${API}/tolerance`, {
+    method: 'PUT',
+    body: JSON.stringify({ level: parseInt(val) }),
+  }).catch(() => {});
+}
+
+// ---- Auto-Triage ----
+
+async function runAutoTriage() {
+  const btn = document.getElementById('auto-triage-btn');
+  const resultEl = document.getElementById('auto-triage-result');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  resultEl.innerHTML = '';
+
+  try {
+    const data = await api(`${API}/auto-triage`, { method: 'POST' });
+    if (data._offline) {
+      resultEl.innerHTML = '<span style="color:var(--red)">Offline</span>';
+      return;
+    }
+
+    resultEl.innerHTML = `
+      <div class="auto-triage-stats">
+        <span>${data.processed} processed</span>
+        <span style="color:var(--text-dim)">·</span>
+        <span style="color:var(--green)">${data.auto_dismissed} dismissed</span>
+        <span style="color:var(--text-dim)">·</span>
+        <span style="color:var(--yellow)">${data.auto_confirmed} confirmed</span>
+        <span style="color:var(--text-dim)">·</span>
+        <span>${data.remaining} remaining for you</span>
+      </div>
+    `;
+
+    if (data.auto_dismissed + data.auto_confirmed > 0) {
+      showXpToast(0, `AI handled ${data.auto_dismissed + data.auto_confirmed} alerts`);
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<span style="color:var(--red)">${e.message || 'Failed'}</span>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Run Auto-Triage Now';
 }
 
 // ---- Geo Threat Feed ----

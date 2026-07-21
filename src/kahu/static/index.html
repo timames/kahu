@@ -183,6 +183,15 @@
     </div>
 
     <div class="settings-group">
+      <h3>AI Auto-Triage</h3>
+      <p class="settings-desc">Let the AI handle obvious alerts. It will auto-dismiss false positives and auto-confirm true positives based on your tolerance level. You review the uncertain ones.</p>
+      <button id="auto-triage-btn" class="auto-triage-btn" onclick="runAutoTriage()">
+        Run Auto-Triage Now
+      </button>
+      <div id="auto-triage-result" class="auto-triage-result"></div>
+    </div>
+
+    <div class="settings-group">
       <h3>Geo Threat Intel</h3>
       <div id="geo-feed" class="geo-feed">
         <div class="loading"><div class="spinner"></div></div>

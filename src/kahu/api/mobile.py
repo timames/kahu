@@ -16,6 +16,9 @@ from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Seve
 from kahu.models.tickets import Ticket, TicketStatus
 from kahu.models.xp import XpEvent
 from kahu.services.triage.disposition import record_disposition
+from kahu.services.triage.auto_disposition import (
+    maybe_auto_dispose, get_tolerance, set_tolerance as _set_tolerance,
+)
 
 router = APIRouter()
 
@@ -256,9 +259,9 @@ async def swipe(
     xp = XpEvent(analyst=body.analyst, points=1, reason="alert_triage", ref_id=alert_id)
     session.add(xp)
 
-    # If true positive, create a ticket
+    # If true positive or escalated, create a ticket
     ticket_id = None
-    if verdict == DispositionVerdict.TRUE_POSITIVE:
+    if verdict in (DispositionVerdict.TRUE_POSITIVE, DispositionVerdict.UNDETERMINED):
         ticket = Ticket(
             alert_id=alert_id,
             title=alert.rule_description or f"Rule {alert.rule_id}",
@@ -652,6 +655,111 @@ async def assign_ticket(
     ticket.assigned_to = analyst
     await session.commit()
     return _ticket_out(ticket)
+
+
+# ---------------------------------------------------------------------------
+# Tolerance — set exposure level from PWA
+# ---------------------------------------------------------------------------
+
+
+class ToleranceIn(BaseModel):
+    level: int = Field(..., ge=1, le=3)
+
+
+class ToleranceOut(BaseModel):
+    level: int
+    label: str
+    auto_dismiss_threshold: float
+    auto_confirm_threshold: float | None
+
+
+TOLERANCE_LABELS = {1: "Conservative", 2: "Balanced", 3: "Aggressive"}
+TOLERANCE_THRESHOLDS = {1: (0.95, None), 2: (0.80, 0.90), 3: (0.60, 0.75)}
+
+
+@router.get("/tolerance", response_model=ToleranceOut)
+async def get_tol():
+    level = get_tolerance()
+    dismiss, confirm = TOLERANCE_THRESHOLDS[level]
+    return ToleranceOut(
+        level=level,
+        label=TOLERANCE_LABELS[level],
+        auto_dismiss_threshold=dismiss,
+        auto_confirm_threshold=confirm,
+    )
+
+
+@router.put("/tolerance", response_model=ToleranceOut)
+async def set_tol(body: ToleranceIn):
+    _set_tolerance(body.level)
+    level = get_tolerance()
+    dismiss, confirm = TOLERANCE_THRESHOLDS[level]
+    return ToleranceOut(
+        level=level,
+        label=TOLERANCE_LABELS[level],
+        auto_dismiss_threshold=dismiss,
+        auto_confirm_threshold=confirm,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Auto-triage — bulk process existing undispositioned alerts
+# ---------------------------------------------------------------------------
+
+
+class AutoTriageOut(BaseModel):
+    processed: int
+    auto_dismissed: int
+    auto_confirmed: int
+    tickets_created: int
+    remaining: int
+
+
+@router.post("/auto-triage", response_model=AutoTriageOut)
+async def auto_triage(
+    session: AsyncSession = Depends(get_session),
+) -> AutoTriageOut:
+    """Run auto-disposition on all existing undispositioned alerts."""
+
+    # Get all undispositioned alerts with LLM output
+    stmt = (
+        select(Alert)
+        .outerjoin(AlertDisposition)
+        .where(AlertDisposition.id.is_(None))
+        .where(Alert.llm_triage.isnot(None))
+    )
+    result = await session.execute(stmt)
+    alerts = result.scalars().all()
+
+    auto_dismissed = 0
+    auto_confirmed = 0
+    tickets_created = 0
+
+    for alert in alerts:
+        ar = await maybe_auto_dispose(alert, alert.llm_triage, session)
+        if ar.auto_handled:
+            if ar.verdict == "false_positive":
+                auto_dismissed += 1
+            elif ar.verdict == "true_positive":
+                auto_confirmed += 1
+                if ar.ticket_created:
+                    tickets_created += 1
+
+    # Count remaining
+    remaining = await session.scalar(
+        select(func.count())
+        .select_from(Alert)
+        .outerjoin(AlertDisposition)
+        .where(AlertDisposition.id.is_(None))
+    ) or 0
+
+    return AutoTriageOut(
+        processed=len(alerts),
+        auto_dismissed=auto_dismissed,
+        auto_confirmed=auto_confirmed,
+        tickets_created=tickets_created,
+        remaining=remaining,
+    )
 
 
 def _ticket_out(t: Ticket) -> TicketOut:

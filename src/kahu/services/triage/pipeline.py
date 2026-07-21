@@ -24,6 +24,7 @@ from kahu.services.triage.filters import FilterResult, apply_deterministic_filte
 from kahu.services.triage.enrichment import EnrichedAlert, enrich_alert_group
 from kahu.services.triage.llm_triage import run_llm_triage
 from kahu.services.triage.disposition import persist_alert
+from kahu.services.triage.auto_disposition import maybe_auto_dispose
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ class PipelineStats:
     filtered: int = 0
     triaged: int = 0
     persisted: int = 0
+    auto_disposed: int = 0
     errors: int = 0
 
 
@@ -111,6 +113,13 @@ async def run_pipeline(
         try:
             alert = await persist_alert(result, raw_alert, session)
             result.alert_id = str(alert.id)
+
+            # Stage 5: Auto-disposition (AI handles obvious cases)
+            auto_result = await maybe_auto_dispose(alert, llm_result, session)
+            if auto_result.auto_handled:
+                result.provenance["auto_disposed"] = True
+                result.provenance["auto_verdict"] = auto_result.verdict
+                result.provenance["auto_confidence"] = auto_result.confidence
         except Exception:
             logger.error("Failed to persist alert", exc_info=True)
 
@@ -140,6 +149,8 @@ async def run_pipeline_batch(
                 stats.triaged += 1
                 if result.alert_id:
                     stats.persisted += 1
+                if result.provenance and result.provenance.get("auto_disposed"):
+                    stats.auto_disposed += 1
         except Exception:
             stats.errors += 1
             logger.error("Pipeline error for alert", exc_info=True)

@@ -1062,6 +1062,37 @@ nav .badge {
   border-left: 3px solid var(--accent);
 }
 
+/* ── Auto-Triage ──────────────────────────────── */
+
+.auto-triage-btn {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: opacity 0.2s;
+}
+.auto-triage-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.auto-triage-result {
+  margin-top: 10px;
+}
+.auto-triage-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-bright);
+  padding: 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+}
+
 /* ── Geo Threat Feed ──────────────────────────── */
 
 .geo-feed {
