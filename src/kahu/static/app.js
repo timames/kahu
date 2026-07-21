@@ -624,6 +624,10 @@ async function loadGeoFeed() {
     // Analyze recent alerts for geo patterns
     const geoData = await api(`${API}/feed?limit=50`);
     if (geoData._offline || !geoData.cards) return;
+    if (geoData.cards.length === 0) {
+      feedEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px">No alerts to analyze. Geo intel will appear when events arrive.</p>';
+      return;
+    }
 
     // Extract source IPs and identify geo patterns
     const geoThreats = analyzeGeoThreats(geoData.cards);
