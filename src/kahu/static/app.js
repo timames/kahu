@@ -280,8 +280,13 @@ async function doSwipe(card, direction) {
     // Show XP toast
     showXpToast(result.xp_earned, result.ticket_id ? 'Ticket created' : null);
 
-    // Show coach modal after a moment
-    setTimeout(() => showCoach(card.id), 600);
+    // If escalated/confirmed and ticket created, show ticket confirmation
+    if (result.ticket_id && (direction === 'up' || direction === 'right')) {
+      setTimeout(() => showTicketConfirmation(result, card, direction), 400);
+    } else {
+      // Show coach modal after a moment
+      setTimeout(() => showCoach(card.id), 600);
+    }
 
     // Re-render
     setTimeout(renderFeed, 300);
@@ -294,6 +299,33 @@ async function doSwipe(card, direction) {
   }
 }
 
+// ---- Ticket Confirmation Modal ----
+
+function showTicketConfirmation(result, card, direction) {
+  const action = direction === 'up' ? 'Escalated' : 'Confirmed';
+  const actionColor = direction === 'up' ? 'var(--yellow)' : 'var(--red)';
+  const modal = document.getElementById('coach-modal');
+  modal.querySelector('.coach-title').textContent = `Case Opened`;
+  modal.querySelector('.coach-body').innerHTML = `
+    <div style="text-align:center;padding:8px 0">
+      <div style="font-size:32px;margin-bottom:8px">📋</div>
+      <div style="color:${actionColor};font-weight:600;font-size:15px;margin-bottom:4px">${action}</div>
+      <div style="font-size:14px;margin-bottom:12px">${escHtml(card.title).substring(0, 80)}</div>
+      <div style="background:var(--card);border-radius:8px;padding:10px;font-size:13px;text-align:left">
+        <div><strong>Severity:</strong> <span class="card-sev ${card.severity}" style="font-size:11px;padding:2px 6px">${card.severity}</span></div>
+        <div style="margin-top:4px"><strong>Agent:</strong> ${escHtml(card.agent || 'unknown')}</div>
+        <div style="margin-top:4px"><strong>Status:</strong> Open — assigned to you</div>
+      </div>
+      <button onclick="closeCoach();navigate('score')" style="margin-top:14px;padding:8px 20px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-weight:600;cursor:pointer">
+        View in Tickets
+      </button>
+    </div>
+  `;
+  modal.querySelector('.coach-tip-text').textContent = 'Close this ticket from the Score tab when investigation is complete.';
+  modal.querySelector('.coach-controls').innerHTML = '';
+  modal.classList.add('active');
+}
+
 // ---- Coach Modal ----
 
 async function showCoach(alertId) {
@@ -303,7 +335,7 @@ async function showCoach(alertId) {
 
     const modal = document.getElementById('coach-modal');
     modal.querySelector('.coach-title').textContent = data.lesson_title;
-    modal.querySelector('.coach-body').textContent = data.lesson_body;
+    modal.querySelector('.coach-body').innerHTML = escHtml(data.lesson_body);
     modal.querySelector('.coach-tip-text').textContent = data.next_tip;
 
     const tags = modal.querySelector('.coach-controls');
