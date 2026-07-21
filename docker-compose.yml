@@ -167,6 +167,24 @@ services:
       wazuh-manager:
         condition: service_healthy
 
+  greenbone:
+    image: greenbone/community-edition:stable
+    hostname: greenbone
+    ports:
+      - "9390:9390"
+      - "9392:9392"
+    volumes:
+      - greenbone-data:/var/lib/gvm
+      - greenbone-vt:/var/lib/openvas
+    environment:
+      GREENBONE_PASSWORD: admin
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9392/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
   generator:
     build: ./generator
     container_name: kahu-generator
@@ -205,4 +223,6 @@ volumes:
   filebeat-var:
   wazuh-indexer-data:
   wazuh-dashboard-config:
+  greenbone-data:
+  greenbone-vt:
   wazuh-dashboard-custom:

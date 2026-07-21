@@ -314,6 +314,26 @@ _register(ConnectorType(
     ),
 ))
 
+# ── Vulnerability Scanners ────────────────────────────────
+
+_register(ConnectorType(
+    id="greenbone",
+    name="Greenbone OpenVAS",
+    category="vulnerability",
+    icon="\U0001f50d",  # magnifying glass
+    auth_method="credentials",
+    description="Network vulnerability scanning and assessment via Greenbone Community Edition (OpenVAS).",
+    events_per_day="Varies by scan scope",
+    setup_guide_url="https://greenbone.github.io/docs/latest/",
+    fields=(
+        ConnectorField("host", "Scanner Host", placeholder="greenbone",
+                       help_text="Hostname or IP of the Greenbone appliance"),
+        ConnectorField("port", "API Port", placeholder="9390", required=False),
+        ConnectorField("username", "Admin Username", placeholder="admin"),
+        ConnectorField("password", "Admin Password", field_type="password"),
+    ),
+))
+
 # ── Generic / Catch-All ───────────────────────────────────
 
 _register(ConnectorType(
@@ -372,6 +392,7 @@ def get_categories() -> list[dict]:
         "network": "Network & Firewall",
         "cloud": "Cloud Platforms",
         "identity": "Identity & MFA",
+        "vulnerability": "Vulnerability Scanners",
     }
     return [
         {"id": k, "name": labels.get(k, k.title()), "count": v}

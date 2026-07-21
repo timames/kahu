@@ -5,6 +5,7 @@ const TRIAGE_API = '/api/triage';
 const INVEST_API = '/api/investigation';
 const CONN_API = '/api/connectors';
 const COMP_API = '/api/compliance';
+const VULN_API = '/api/vulns';
 let currentScreen = 'glance';
 let feedCards = [];
 let feedRemaining = 0;
@@ -25,6 +26,7 @@ function navigate(screen) {
   if (screen === 'profile') loadProfile();
   if (screen === 'compliance') loadCompliance();
   if (screen === 'sources') loadSources();
+  if (screen === 'vulns') loadVulns();
   if (screen === 'settings') loadSettings();
 }
 
@@ -529,6 +531,16 @@ async function loadSettings() {
       setStatus('status-indexer', status.wazuh_indexer_healthy);
       setStatus('status-ollama', status.ollama_healthy);
       setStatus('status-pipeline', !status.pipeline_degraded);
+    }
+  } catch {
+    // Leave as unknown
+  }
+
+  // Greenbone scanner status
+  try {
+    const gvm = await api(`${VULN_API}/health`);
+    if (!gvm._offline) {
+      setStatus('status-greenbone', gvm.online);
     }
   } catch {
     // Leave as unknown
@@ -1342,6 +1354,230 @@ function closeAddSource() {
   selectedConnectorType = null;
   // Refresh sources list
   if (currentScreen === 'sources') loadSources();
+}
+
+// ---- Vulnerability Scanner Screen ----
+
+async function loadVulns() {
+  const [summary, results, scans] = await Promise.all([
+    api(`${VULN_API}/summary`),
+    api(`${VULN_API}/results`).catch(() => ({ findings: [] })),
+    api(`${VULN_API}/scans`).catch(() => ({ scans: [] })),
+  ]);
+
+  if (summary._offline) return;
+
+  // Summary cards
+  const summaryEl = document.getElementById('vulns-summary');
+  if (!summary.scanner_online) {
+    summaryEl.innerHTML = `
+      <div class="vulns-offline">
+        <div class="vulns-offline-icon">&#x26A0;</div>
+        <h3>Scanner Offline</h3>
+        <p>Greenbone vulnerability scanner is not reachable. Check that the service is running.</p>
+      </div>`;
+    document.getElementById('vulns-findings').innerHTML = '';
+    return;
+  }
+
+  const sevColors = { critical: '#ff4444', high: '#ff8c00', medium: '#ffd600', low: '#4fc3f7', info: '#888' };
+  summaryEl.innerHTML = `
+    <div class="vulns-stat-row">
+      <div class="vulns-stat" style="border-left:3px solid ${sevColors.critical}">
+        <div class="vulns-stat-value">${summary.critical}</div>
+        <div class="vulns-stat-label">Critical</div>
+      </div>
+      <div class="vulns-stat" style="border-left:3px solid ${sevColors.high}">
+        <div class="vulns-stat-value">${summary.high}</div>
+        <div class="vulns-stat-label">High</div>
+      </div>
+      <div class="vulns-stat" style="border-left:3px solid ${sevColors.medium}">
+        <div class="vulns-stat-value">${summary.medium}</div>
+        <div class="vulns-stat-label">Medium</div>
+      </div>
+      <div class="vulns-stat" style="border-left:3px solid ${sevColors.low}">
+        <div class="vulns-stat-value">${summary.low}</div>
+        <div class="vulns-stat-label">Low</div>
+      </div>
+      <div class="vulns-stat">
+        <div class="vulns-stat-value">${summary.total}</div>
+        <div class="vulns-stat-label">Total</div>
+      </div>
+    </div>
+    <div class="vulns-scan-status">
+      ${summary.tasks_running > 0
+        ? `<span class="vulns-running"><div class="spinner-sm"></div> ${summary.tasks_running} scan${summary.tasks_running > 1 ? 's' : ''} running</span>`
+        : `<span>${summary.tasks_total} scan${summary.tasks_total !== 1 ? 's' : ''} configured</span>`}
+    </div>
+  `;
+
+  // Findings list
+  renderFindings(results.findings || []);
+
+  // Scans list
+  renderScans(scans.scans || []);
+
+  // Load targets
+  loadVulnTargets();
+}
+
+function renderFindings(findings) {
+  const el = document.getElementById('vulns-findings');
+  if (findings.length === 0) {
+    el.innerHTML = `
+      <div class="sources-empty">
+        <div class="sources-empty-icon">&#x2705;</div>
+        <h3>No findings yet</h3>
+        <p>Run a vulnerability scan to discover issues in your network.</p>
+      </div>`;
+    return;
+  }
+
+  const sevColors = { critical: '#ff4444', high: '#ff8c00', medium: '#ffd600', low: '#4fc3f7', info: '#888' };
+  el.innerHTML = findings.map(f => `
+    <div class="vuln-card">
+      <div class="vuln-sev" style="background:${sevColors[f.severity_label] || '#888'}">${f.severity_label[0].toUpperCase()}</div>
+      <div class="vuln-info">
+        <div class="vuln-name">${escHtml(f.name)}</div>
+        <div class="vuln-meta">${escHtml(f.host)}${f.port ? ':' + escHtml(f.port) : ''} ${f.cve ? '&middot; ' + escHtml(f.cve) : ''}</div>
+        ${f.solution ? `<div class="vuln-solution">${escHtml(f.solution)}</div>` : ''}
+      </div>
+      <div class="vuln-score">${Number(f.severity).toFixed(1)}</div>
+    </div>
+  `).join('');
+}
+
+function renderScans(scans) {
+  const el = document.getElementById('vulns-scans');
+  if (scans.length === 0) {
+    el.innerHTML = `
+      <div class="sources-empty">
+        <div class="sources-empty-icon">&#x1F50D;</div>
+        <h3>No scans yet</h3>
+        <p>Create a scan to start finding vulnerabilities.</p>
+      </div>`;
+    return;
+  }
+
+  const statusIcons = { Done: '&#x2705;', Running: '&#x23F3;', Requested: '&#x23F3;', New: '&#x2B55;', Stopped: '&#x23F9;' };
+  el.innerHTML = scans.map(s => `
+    <div class="scan-card">
+      <div class="scan-status-icon">${statusIcons[s.status] || '&#x2B55;'}</div>
+      <div class="scan-info">
+        <div class="scan-name">${escHtml(s.name || 'Unnamed scan')}</div>
+        <div class="scan-meta">Status: ${escHtml(s.status || 'Unknown')}${s.progress !== undefined ? ' &middot; ' + s.progress + '%' : ''}</div>
+      </div>
+      ${s.status === 'Done' ? `<button class="scan-view-btn" onclick="viewScanResults('${s.id}')">Results</button>` : ''}
+    </div>
+  `).join('');
+}
+
+async function loadVulnTargets() {
+  try {
+    const data = await api(`${VULN_API}/targets`);
+    const el = document.getElementById('vulns-targets');
+    const targets = data.targets || [];
+    if (targets.length === 0) {
+      el.innerHTML = `
+        <div class="sources-empty">
+          <div class="sources-empty-icon">&#x1F3AF;</div>
+          <h3>No targets</h3>
+          <p>Targets are created automatically when you start a scan.</p>
+        </div>`;
+      return;
+    }
+    el.innerHTML = targets.map(t => `
+      <div class="scan-card">
+        <div class="scan-status-icon">&#x1F3AF;</div>
+        <div class="scan-info">
+          <div class="scan-name">${escHtml(t.name || 'Unnamed')}</div>
+          <div class="scan-meta">${escHtml(t.hosts || '')}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch {
+    document.getElementById('vulns-targets').innerHTML = '<p style="color:var(--text-dim);padding:16px">Could not load targets.</p>';
+  }
+}
+
+async function viewScanResults(taskId) {
+  try {
+    const data = await api(`${VULN_API}/results?task_id=${taskId}`);
+    renderFindings(data.findings || []);
+    switchVulnTab('findings');
+  } catch {
+    // ignore
+  }
+}
+
+function switchVulnTab(tab) {
+  document.querySelectorAll('.vulns-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.vulns-tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.vulns-tab-content#vulns-tab-${tab}`).classList.add('active');
+  // Find matching tab button
+  document.querySelectorAll('.vulns-tab').forEach(t => {
+    if (t.textContent.toLowerCase() === tab || t.textContent.toLowerCase().startsWith(tab)) t.classList.add('active');
+  });
+}
+
+function openNewScan() {
+  const modal = document.getElementById('scan-modal');
+  document.querySelectorAll('.scan-step').forEach(s => s.classList.remove('active'));
+  document.getElementById('scan-step-target').classList.add('active');
+  document.getElementById('scan-name').value = '';
+  document.getElementById('scan-hosts').value = '';
+  modal.classList.add('active');
+}
+
+async function submitScan(e) {
+  e.preventDefault();
+  const btn = document.getElementById('scan-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+
+  const name = document.getElementById('scan-name').value.trim();
+  const hosts = document.getElementById('scan-hosts').value.trim();
+
+  try {
+    // Create target first
+    const target = await api(`${VULN_API}/targets`, {
+      method: 'POST',
+      body: JSON.stringify({ name: name + ' target', hosts }),
+    });
+
+    const targetId = target.id || target.target_id || '';
+    if (!targetId) throw new Error('Failed to create target');
+
+    // Create and start scan
+    const scan = await api(`${VULN_API}/scans`, {
+      method: 'POST',
+      body: JSON.stringify({ name, target_id: targetId }),
+    });
+
+    document.getElementById('scan-result-content').innerHTML = `
+      <div class="src-result-icon">&#x2705;</div>
+      <div class="src-result-title">Scan Started</div>
+      <div class="src-result-msg">Vulnerability scan "${escHtml(name)}" is now running against ${escHtml(hosts)}. Results will appear as the scan progresses.</div>
+    `;
+    document.querySelectorAll('.scan-step').forEach(s => s.classList.remove('active'));
+    document.getElementById('scan-step-result').classList.add('active');
+  } catch (err) {
+    document.getElementById('scan-result-content').innerHTML = `
+      <div class="src-result-icon">&#x274C;</div>
+      <div class="src-result-title">Scan Failed</div>
+      <div class="src-result-msg">${escHtml(err.message || 'Could not start scan')}</div>
+    `;
+    document.querySelectorAll('.scan-step').forEach(s => s.classList.remove('active'));
+    document.getElementById('scan-step-result').classList.add('active');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Start Scan';
+}
+
+function closeScanModal() {
+  document.getElementById('scan-modal').classList.remove('active');
+  if (currentScreen === 'vulns') loadVulns();
 }
 
 // ---- Compliance Screen ----

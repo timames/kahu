@@ -203,6 +203,69 @@
     </div>
   </div>
 
+  <!-- ===== VULNS ===== -->
+  <div id="screen-vulns" class="screen">
+    <div class="vulns-header">
+      <h2>Vulnerabilities</h2>
+      <button class="vulns-scan-btn" onclick="openNewScan()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+        New Scan
+      </button>
+    </div>
+
+    <div id="vulns-summary" class="vulns-summary">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+
+    <div class="vulns-tabs">
+      <button class="vulns-tab active" onclick="switchVulnTab('findings')">Findings</button>
+      <button class="vulns-tab" onclick="switchVulnTab('scans')">Scans</button>
+      <button class="vulns-tab" onclick="switchVulnTab('targets')">Targets</button>
+    </div>
+
+    <div id="vulns-tab-findings" class="vulns-tab-content active">
+      <div id="vulns-findings" class="vulns-findings">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+    <div id="vulns-tab-scans" class="vulns-tab-content">
+      <div id="vulns-scans" class="vulns-scans"></div>
+    </div>
+
+    <div id="vulns-tab-targets" class="vulns-tab-content">
+      <div id="vulns-targets" class="vulns-targets"></div>
+    </div>
+  </div>
+
+  <!-- ===== NEW SCAN MODAL ===== -->
+  <div id="scan-modal" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <h3>New Vulnerability Scan</h3>
+
+      <div id="scan-step-target" class="scan-step active">
+        <form id="scan-form" onsubmit="return submitScan(event)">
+          <div class="src-field">
+            <label>Scan Name <span class="required">*</span></label>
+            <input id="scan-name" type="text" placeholder="e.g. Weekly perimeter scan" required>
+          </div>
+          <div class="src-field">
+            <label>Target Hosts <span class="required">*</span></label>
+            <input id="scan-hosts" type="text" placeholder="192.168.1.0/24, 10.0.0.1" required>
+            <span class="src-help">Comma-separated IPs, ranges, or CIDR blocks</span>
+          </div>
+          <button type="submit" class="src-submit-btn" id="scan-submit-btn">Start Scan</button>
+        </form>
+      </div>
+
+      <div id="scan-step-result" class="scan-step">
+        <div id="scan-result-content" class="src-result-content"></div>
+        <button class="modal-close" onclick="closeScanModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== SETTINGS ===== -->
   <div id="screen-settings" class="screen">
     <div class="settings-group">
@@ -254,6 +317,10 @@
       </div>
       <div id="status-pipeline" class="settings-item">
         <span class="settings-item-label">Triage Pipeline</span>
+        <span class="settings-item-value"><span>Checking...</span><div class="status-dot"></div></span>
+      </div>
+      <div id="status-greenbone" class="settings-item">
+        <span class="settings-item-label">Vuln Scanner (Greenbone)</span>
         <span class="settings-item-value"><span>Checking...</span><div class="status-dot"></div></span>
       </div>
       <button class="service-refresh-btn" onclick="refreshServices()">
@@ -318,6 +385,10 @@
     <button data-screen="compliance" onclick="navigate('compliance')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span>Comply</span>
+    </button>
+    <button data-screen="vulns" onclick="navigate('vulns')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Vulns</span>
     </button>
     <button data-screen="sources" onclick="navigate('sources')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
