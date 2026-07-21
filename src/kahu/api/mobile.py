@@ -37,6 +37,8 @@ class FeedCard(BaseModel):
     severity: str
     title: str
     explanation: str
+    ai_verdict: str | None  # true_positive, false_positive, escalate
+    ai_confidence: float
     agent: str | None
     source_ip: str | None
     timestamp: datetime
@@ -175,11 +177,26 @@ async def feed(
         raw = a.raw_event or {}
         source_ip = raw.get("data", {}).get("srcip") or raw.get("data", {}).get("src_ip")
 
+        # Derive AI verdict: use LLM's explicit recommendation, or infer from confidence + benign
+        ai_verdict = llm.get("recommended_verdict")
+        ai_confidence = llm.get("confidence", 0.0)
+        if not ai_verdict and not llm.get("degraded"):
+            # Infer from confidence and benign explanations
+            benign = llm.get("benign_explanations", [])
+            if ai_confidence >= 0.7 and not benign:
+                ai_verdict = "true_positive"
+            elif ai_confidence < 0.3 or len(benign) >= 2:
+                ai_verdict = "false_positive"
+            elif ai_confidence >= 0.5:
+                ai_verdict = "escalate"
+
         cards.append(FeedCard(
             id=a.id,
             severity=a.severity.value if isinstance(a.severity, Severity) else a.severity,
             title=a.rule_description or f"Rule {a.rule_id}",
             explanation=llm.get("explanation", "AI analysis unavailable — review the raw alert data."),
+            ai_verdict=ai_verdict,
+            ai_confidence=ai_confidence,
             agent=a.agent_name,
             source_ip=source_ip,
             timestamp=a.created_at,

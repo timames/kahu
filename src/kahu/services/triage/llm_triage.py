@@ -46,6 +46,7 @@ Analyze this security alert and provide a structured triage assessment.
 Respond with ONLY valid JSON in this exact format:
 {{
   "severity": "critical|high|medium|low|info",
+  "recommended_verdict": "true_positive|false_positive|escalate",
   "explanation": "Plain-English explanation of what happened and why it matters",
   "benign_explanations": ["List of probable benign explanations if any"],
   "recommended_actions": ["Specific next steps for the analyst"],
@@ -56,6 +57,7 @@ Respond with ONLY valid JSON in this exact format:
 
 class LLMTriageOutput(BaseModel):
     severity: str | None = None
+    recommended_verdict: str | None = None
     explanation: str = ""
     benign_explanations: list[str] = Field(default_factory=list)
     recommended_actions: list[str] = Field(default_factory=list)
@@ -178,6 +180,9 @@ def _parse_llm_response(raw: str) -> dict:
         # Validate severity is in allowed set
         if result["severity"] not in {"critical", "high", "medium", "low", "info", None}:
             result["severity"] = None
+        # Validate verdict
+        if result.get("recommended_verdict") not in {"true_positive", "false_positive", "escalate", None}:
+            result["recommended_verdict"] = None
         return result
     except (json.JSONDecodeError, Exception) as e:
         logger.warning("Failed to parse LLM response as JSON: %s", e)

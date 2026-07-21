@@ -141,17 +141,30 @@ function renderFeed() {
     const timeAgo = formatTimeAgo(new Date(card.timestamp));
     const actions = (card.recommended_actions || []).slice(0, 3);
 
+    // AI verdict badge
+    const verdictLabels = {
+      true_positive: { text: 'AI: Confirm', cls: 'ai-confirm', arrow: '→' },
+      false_positive: { text: 'AI: Dismiss', cls: 'ai-dismiss', arrow: '←' },
+      escalate: { text: 'AI: Escalate', cls: 'ai-escalate', arrow: '↑' },
+    };
+    const aiV = card.ai_verdict && verdictLabels[card.ai_verdict];
+    const confidencePct = Math.round((card.ai_confidence || 0) * 100);
+
     el.innerHTML = `
       <div class="swipe-overlay left">FALSE POS</div>
       <div class="swipe-overlay right">CONFIRM</div>
       <div class="swipe-overlay up">ESCALATE</div>
-      <span class="card-sev ${card.severity}">${card.severity}</span>
+      <div class="card-top-row">
+        <span class="card-sev ${card.severity}">${card.severity}</span>
+        ${aiV ? `<span class="ai-badge ${aiV.cls}" title="${confidencePct}% confidence">${aiV.arrow} ${aiV.text}</span>` : ''}
+      </div>
       <h3 class="card-title">${escHtml(card.title)}</h3>
       <p class="card-explanation">${escHtml(card.explanation)}</p>
       <div class="card-meta">
         ${card.agent ? `<span class="card-meta-item">${escHtml(card.agent)}</span>` : ''}
         ${card.source_ip ? `<span class="card-meta-item">${escHtml(card.source_ip)}</span>` : ''}
         <span class="card-meta-item">${timeAgo}</span>
+        ${confidencePct > 0 ? `<span class="card-meta-item">${confidencePct}% conf</span>` : ''}
       </div>
       ${actions.length > 0 ? `
         <div class="card-actions">
@@ -421,6 +434,17 @@ function addChatMsg(text, role) {
 async function loadSettings() {
   const el = document.getElementById('screen-settings');
 
+  // Restore tolerance slider
+  const saved = localStorage.getItem('kahu_tolerance') || '2';
+  const slider = document.getElementById('tolerance-slider');
+  if (slider) {
+    slider.value = saved;
+    setTolerance(saved);
+  }
+
+  // Load geo threat feed
+  loadGeoFeed();
+
   // Pipeline status
   try {
     const status = await api(`${TRIAGE_API}/status`);
@@ -433,6 +457,123 @@ async function loadSettings() {
   } catch {
     // Leave as unknown
   }
+}
+
+// ---- Exposure Tolerance ----
+
+const TOLERANCE_INFO = {
+  '1': {
+    label: 'Conservative',
+    desc: 'Maximum protection. Auto-block unknown geolocations, flag all anomalies, tighter thresholds. Best for regulated environments (HIPAA, CMMC, ITAR).',
+  },
+  '2': {
+    label: 'Balanced',
+    desc: 'Default posture. Flag suspicious activity, allow known-good patterns. Good for most organizations.',
+  },
+  '3': {
+    label: 'Aggressive',
+    desc: 'Minimal friction. Only flag confirmed threats and high-confidence detections. More noise reduction, slightly higher risk tolerance.',
+  },
+};
+
+function setTolerance(val) {
+  localStorage.setItem('kahu_tolerance', val);
+  const info = TOLERANCE_INFO[val];
+
+  // Update labels
+  document.querySelectorAll('.tolerance-label').forEach(l => {
+    l.classList.toggle('active', l.dataset.val === val);
+  });
+
+  // Update description
+  document.getElementById('tolerance-desc').textContent = info.desc;
+}
+
+// ---- Geo Threat Feed ----
+
+async function loadGeoFeed() {
+  const feedEl = document.getElementById('geo-feed');
+
+  // Pull geo data from alert analysis
+  try {
+    const data = await api(`${API}/glance`);
+    if (data._offline) {
+      feedEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px">Offline</p>';
+      return;
+    }
+
+    // Analyze recent alerts for geo patterns
+    const geoData = await api(`${API}/feed?limit=50`);
+    if (geoData._offline || !geoData.cards) return;
+
+    // Extract source IPs and identify geo patterns
+    const geoThreats = analyzeGeoThreats(geoData.cards);
+
+    if (geoThreats.length === 0) {
+      feedEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px">No geo-based threats detected. Your perimeter looks clean.</p>';
+      return;
+    }
+
+    feedEl.innerHTML = geoThreats.map(t => `
+      <div class="geo-item">
+        <div class="geo-flag">${t.flag}</div>
+        <div class="geo-info">
+          <div class="geo-title">${escHtml(t.title)}</div>
+          <div class="geo-detail">${escHtml(t.detail)}</div>
+        </div>
+        <button class="geo-action${t.applied ? ' applied' : ''}"
+                onclick="applyGeoRule('${escHtml(t.id)}')">${t.applied ? 'Applied' : 'Block'}</button>
+      </div>
+    `).join('');
+  } catch {
+    feedEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px">Unable to load threat intel</p>';
+  }
+}
+
+function analyzeGeoThreats(cards) {
+  // Group alerts by source IP prefix to detect geo patterns
+  const ipCounts = {};
+  for (const card of cards) {
+    if (!card.source_ip) continue;
+    const prefix = card.source_ip.split('.').slice(0, 2).join('.');
+    if (!ipCounts[prefix]) {
+      ipCounts[prefix] = { count: 0, ips: new Set(), severities: [] };
+    }
+    ipCounts[prefix].count++;
+    ipCounts[prefix].ips.add(card.source_ip);
+    ipCounts[prefix].severities.push(card.severity);
+  }
+
+  // Generate threat recommendations for high-volume sources
+  const threats = [];
+  const applied = JSON.parse(localStorage.getItem('kahu_geo_rules') || '[]');
+
+  for (const [prefix, data] of Object.entries(ipCounts)) {
+    if (data.count < 3) continue;
+    const hasCritical = data.severities.includes('critical') || data.severities.includes('high');
+    threats.push({
+      id: prefix,
+      flag: hasCritical ? '🔴' : '🟡',
+      title: `Block ${prefix}.x.x subnet`,
+      detail: `${data.count} alerts from ${data.ips.size} IPs — ${data.severities.filter(s => s === 'critical' || s === 'high').length} high/critical`,
+      applied: applied.includes(prefix),
+    });
+  }
+
+  // Sort by count descending
+  threats.sort((a, b) => b.count - a.count);
+  return threats.slice(0, 10);
+}
+
+function applyGeoRule(id) {
+  const applied = JSON.parse(localStorage.getItem('kahu_geo_rules') || '[]');
+  if (!applied.includes(id)) {
+    applied.push(id);
+    localStorage.setItem('kahu_geo_rules', JSON.stringify(applied));
+  }
+  // Re-render
+  loadGeoFeed();
+  if (navigator.vibrate) navigator.vibrate(30);
 }
 
 function setStatus(id, ok) {
