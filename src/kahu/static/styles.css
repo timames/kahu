@@ -991,6 +991,95 @@ nav .badge {
 .badge-icon.gold { background: #854d0e33; border: 1px solid #eab30860; }
 .badge-icon.diamond { background: #1e3a5f33; border: 1px solid #3b82f660; }
 
+/* ── XP Toast ──────────────────────────────────── */
+
+.xp-toast {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: var(--accent);
+  color: var(--bg);
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+}
+.xp-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── Tickets ───────────────────────────────────── */
+
+.tickets-section {
+  padding: 0 20px;
+}
+.tickets-section h3 {
+  font-size: 16px;
+  color: var(--text-bright);
+  margin-bottom: 8px;
+}
+.ticket-count {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 400;
+}
+.ticket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ticket-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+.ticket-sev {
+  width: 8px;
+  height: 32px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.ticket-sev.critical { background: var(--sev-critical); }
+.ticket-sev.high { background: var(--sev-high); }
+.ticket-sev.medium { background: var(--sev-medium); }
+.ticket-sev.low { background: var(--sev-low); }
+.ticket-sev.info { background: var(--sev-info); }
+.ticket-info { flex: 1; min-width: 0; }
+.ticket-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ticket-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.ticket-close-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* ── Sources Screen ─────────────────────────────── */
 
 .sources-header {

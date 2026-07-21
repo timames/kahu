@@ -13,6 +13,8 @@ from sqlalchemy.orm import selectinload
 
 from kahu.db import get_session
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
+from kahu.models.tickets import Ticket, TicketStatus
+from kahu.models.xp import XpEvent
 from kahu.services.triage.disposition import record_disposition
 
 router = APIRouter()
@@ -57,16 +59,20 @@ class SwipeOut(BaseModel):
     id: uuid.UUID
     verdict: str
     message: str
+    xp_earned: int
+    ticket_id: uuid.UUID | None = None
 
 
 class ScoreResponse(BaseModel):
     score: int  # 0-100
+    xp: int
     streak_days: int
     alerts_handled_today: int
     avg_response_minutes: float | None
     trend: str  # up | down | steady
     badges: list[dict[str, str]]
     weekly_summary: str
+    open_tickets: int
 
 
 class CoachResponse(BaseModel):
@@ -229,10 +235,32 @@ async def swipe(
         session=session,
     )
 
+    # Award 1 XP for triaging any alert
+    xp = XpEvent(analyst=body.analyst, points=1, reason="alert_triage", ref_id=alert_id)
+    session.add(xp)
+
+    # If true positive, create a ticket
+    ticket_id = None
+    if verdict == DispositionVerdict.TRUE_POSITIVE:
+        ticket = Ticket(
+            alert_id=alert_id,
+            title=alert.rule_description or f"Rule {alert.rule_id}",
+            severity=alert.severity.value if isinstance(alert.severity, Severity) else alert.severity,
+            status=TicketStatus.OPEN,
+            assigned_to=body.analyst,
+        )
+        session.add(ticket)
+        await session.flush()
+        ticket_id = ticket.id
+
+    await session.commit()
+
     return SwipeOut(
         id=disposition.id,
         verdict=verdict.value,
         message=message_map[body.direction],
+        xp_earned=1,
+        ticket_id=ticket_id,
     )
 
 
@@ -359,6 +387,22 @@ async def score(
     if avg_minutes and avg_minutes < 15:
         badges.append({"id": "speed_demon", "name": "Speed Demon", "description": "Average response under 15 minutes"})
 
+    # XP from database
+    total_xp = await session.scalar(
+        select(func.coalesce(func.sum(XpEvent.points), 0))
+        .where(XpEvent.analyst == analyst)
+    ) or 0
+
+    # Open tickets
+    open_tickets = await session.scalar(
+        select(func.count())
+        .select_from(Ticket)
+        .where(
+            Ticket.assigned_to == analyst,
+            Ticket.status != TicketStatus.CLOSED,
+        )
+    ) or 0
+
     # Weekly summary
     week_start = today_start - timedelta(days=7)
     week_count = await session.scalar(
@@ -379,12 +423,14 @@ async def score(
 
     return ScoreResponse(
         score=score,
+        xp=total_xp,
         streak_days=streak,
         alerts_handled_today=today_count,
         avg_response_minutes=avg_minutes,
         trend=trend,
         badges=badges,
         weekly_summary=weekly_summary,
+        open_tickets=open_tickets,
     )
 
 
@@ -484,4 +530,122 @@ async def coach(
         duration_seconds=30,
         controls_satisfied=controls_satisfied,
         next_tip=next_tip,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tickets — confirmed alerts that need resolution
+# ---------------------------------------------------------------------------
+
+XP_BY_SEVERITY = {"critical": 100, "high": 50, "medium": 25, "low": 10, "info": 10}
+
+
+class TicketOut(BaseModel):
+    id: uuid.UUID
+    alert_id: uuid.UUID
+    title: str
+    severity: str
+    status: str
+    assigned_to: str
+    closed_by: str | None
+    resolution_notes: str | None
+    created_at: datetime
+
+
+class TicketCloseIn(BaseModel):
+    analyst: str = Field(default="mobile-user", min_length=1, max_length=255)
+    resolution_notes: str = Field(default="", max_length=2000)
+
+
+class TicketCloseOut(BaseModel):
+    id: uuid.UUID
+    status: str
+    xp_earned: int
+    message: str
+
+
+@router.get("/tickets", response_model=list[TicketOut])
+async def list_tickets(
+    status: str = Query(default="open"),
+    analyst: str = Query(default=""),
+    session: AsyncSession = Depends(get_session),
+) -> list[TicketOut]:
+    """List tickets, optionally filtered by status and analyst."""
+    stmt = select(Ticket).order_by(Ticket.created_at.desc())
+
+    if status == "open":
+        stmt = stmt.where(Ticket.status != TicketStatus.CLOSED)
+    elif status == "closed":
+        stmt = stmt.where(Ticket.status == TicketStatus.CLOSED)
+
+    if analyst:
+        stmt = stmt.where(Ticket.assigned_to == analyst)
+
+    result = await session.execute(stmt.limit(50))
+    tickets = result.scalars().all()
+    return [_ticket_out(t) for t in tickets]
+
+
+@router.post("/tickets/{ticket_id}/close", response_model=TicketCloseOut)
+async def close_ticket(
+    ticket_id: uuid.UUID,
+    body: TicketCloseIn,
+    session: AsyncSession = Depends(get_session),
+) -> TicketCloseOut:
+    """Close a ticket and award XP based on severity."""
+    ticket = await session.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(404, "Ticket not found")
+    if ticket.status == TicketStatus.CLOSED:
+        raise HTTPException(409, "Ticket already closed")
+
+    ticket.status = TicketStatus.CLOSED
+    ticket.closed_by = body.analyst
+    ticket.resolution_notes = body.resolution_notes
+
+    # Award XP by severity
+    xp_amount = XP_BY_SEVERITY.get(ticket.severity, 10)
+    xp = XpEvent(
+        analyst=body.analyst,
+        points=xp_amount,
+        reason="ticket_closed",
+        ref_id=ticket_id,
+    )
+    session.add(xp)
+    await session.commit()
+
+    return TicketCloseOut(
+        id=ticket.id,
+        status="closed",
+        xp_earned=xp_amount,
+        message=f"Ticket closed. +{xp_amount} XP!",
+    )
+
+
+@router.patch("/tickets/{ticket_id}/assign")
+async def assign_ticket(
+    ticket_id: uuid.UUID,
+    analyst: str = Query(...),
+    session: AsyncSession = Depends(get_session),
+):
+    """Reassign a ticket."""
+    ticket = await session.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(404, "Ticket not found")
+    ticket.assigned_to = analyst
+    await session.commit()
+    return _ticket_out(ticket)
+
+
+def _ticket_out(t: Ticket) -> TicketOut:
+    return TicketOut(
+        id=t.id,
+        alert_id=t.alert_id,
+        title=t.title,
+        severity=t.severity,
+        status=t.status.value,
+        assigned_to=t.assigned_to,
+        closed_by=t.closed_by,
+        resolution_notes=t.resolution_notes,
+        created_at=t.created_at,
     )

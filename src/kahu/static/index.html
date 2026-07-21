@@ -65,6 +65,10 @@
 
     <div class="stats-grid">
       <div class="stat-card">
+        <div class="stat-value stat-xp">0</div>
+        <div class="stat-label">Total XP</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-value stat-streak">--</div>
         <div class="stat-label">Day streak</div>
       </div>
@@ -72,10 +76,15 @@
         <div class="stat-value stat-today">--</div>
         <div class="stat-label">Today</div>
       </div>
-      <div class="stat-card" style="grid-column: span 2">
+      <div class="stat-card">
         <div class="stat-value stat-response">--</div>
-        <div class="stat-label">Avg response time</div>
+        <div class="stat-label">Avg response</div>
       </div>
+    </div>
+
+    <div class="tickets-section">
+      <h3>Open Tickets <span class="ticket-count" id="ticket-count"></span></h3>
+      <div id="ticket-list" class="ticket-list"></div>
     </div>
 
     <div class="badges-section">

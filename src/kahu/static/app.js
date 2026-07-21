@@ -256,7 +256,7 @@ async function doSwipe(card, direction) {
   if (navigator.vibrate) navigator.vibrate(50);
 
   try {
-    await api(`${API}/feed/${card.id}/swipe`, {
+    const result = await api(`${API}/feed/${card.id}/swipe`, {
       method: 'POST',
       body: JSON.stringify({ direction, analyst: getAnalystName() }),
     });
@@ -264,8 +264,11 @@ async function doSwipe(card, direction) {
     // Remove card from stack
     feedCards = feedCards.filter(c => c.id !== card.id);
 
+    // Show XP toast
+    showXpToast(result.xp_earned, result.ticket_id ? 'Ticket created' : null);
+
     // Show coach modal after a moment
-    setTimeout(() => showCoach(card.id), 400);
+    setTimeout(() => showCoach(card.id), 600);
 
     // Re-render
     setTimeout(renderFeed, 300);
@@ -332,6 +335,7 @@ async function loadScore() {
   trendEl.textContent = arrows[data.trend];
 
   // Stats
+  el.querySelector('.stat-xp').textContent = data.xp;
   el.querySelector('.stat-streak').textContent = data.streak_days;
   el.querySelector('.stat-today').textContent = data.alerts_handled_today;
   el.querySelector('.stat-response').textContent = data.avg_response_minutes ? data.avg_response_minutes + 'm' : '--';
@@ -348,6 +352,26 @@ async function loadScore() {
 
   // Weekly
   el.querySelector('.weekly-text').textContent = data.weekly_summary;
+
+  // Tickets
+  document.getElementById('ticket-count').textContent = data.open_tickets > 0 ? `(${data.open_tickets})` : '';
+
+  const tickets = await loadTickets();
+  const ticketList = document.getElementById('ticket-list');
+  if (!tickets || tickets._offline || tickets.length === 0) {
+    ticketList.innerHTML = '<p style="color:var(--text-dim);font-size:13px;padding:8px 0">No open tickets. Confirm alerts to create tickets.</p>';
+  } else {
+    ticketList.innerHTML = tickets.map(t => `
+      <div class="ticket-card">
+        <div class="ticket-sev ${t.severity}"></div>
+        <div class="ticket-info">
+          <div class="ticket-title">${escHtml(t.title)}</div>
+          <div class="ticket-meta">${escHtml(t.severity)} · ${formatTimeAgo(new Date(t.created_at))}</div>
+        </div>
+        <button class="ticket-close-btn" onclick="closeTicket('${t.id}')">Close</button>
+      </div>
+    `).join('');
+  }
 }
 
 // ---- Investigate Screen ----
@@ -488,8 +512,7 @@ async function loadProfile() {
   const data = await api(`${API}/score?analyst=${encodeURIComponent(getAnalystName())}`);
   if (data._offline) return;
 
-  // XP derived from score data (deterministic, no accumulation bug)
-  const totalXp = (data.alerts_handled_today || 0) * 10 + (data.streak_days || 0) * 25 + (data.score || 0) * 2;
+  const totalXp = data.xp || 0;
 
   const rank = getRank(totalXp);
   const next = getNextRank(totalXp);
@@ -593,6 +616,49 @@ function getBadgeIcon(name) {
   if (n.includes('perfect')) return '💎';
   if (n.includes('volume')) return '📊';
   return '🏅';
+}
+
+// ---- XP Toast ----
+
+function showXpToast(xp, extra) {
+  const existing = document.querySelector('.xp-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = 'xp-toast';
+  toast.innerHTML = `+${xp} XP${extra ? ' · ' + escHtml(extra) : ''}`;
+  document.body.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 1800);
+}
+
+// ---- Tickets ----
+
+async function loadTickets() {
+  const data = await api(`${API}/tickets?analyst=${encodeURIComponent(getAnalystName())}`);
+  if (data._offline) return data;
+  return data;
+}
+
+async function closeTicket(ticketId) {
+  const notes = prompt('Resolution notes (optional):') || '';
+  try {
+    const result = await api(`${API}/tickets/${ticketId}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ analyst: getAnalystName(), resolution_notes: notes }),
+    });
+    if (result.xp_earned) {
+      showXpToast(result.xp_earned, 'Ticket closed');
+    }
+    // Refresh the score screen if visible
+    if (currentScreen === 'score') loadScore();
+  } catch (e) {
+    alert(e.message || 'Failed to close ticket');
+  }
 }
 
 // ---- Sources Screen ----
