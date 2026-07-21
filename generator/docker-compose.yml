@@ -1,7 +1,7 @@
 services:
   generator:
     build: ./generator
-    container_name: kuahene-demo-gen
+    container_name: kahu-demo-gen
     restart: unless-stopped
     env_file: .env
     ports:
@@ -17,7 +17,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: kuahene-demo-caddy
+    container_name: kahu-demo-caddy
     restart: unless-stopped
     ports:
       - "80:80"

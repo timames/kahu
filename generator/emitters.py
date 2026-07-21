@@ -82,7 +82,7 @@ class SyslogEmitter:
                 ts = ts[:4] + " " + ts[5:]
             line = f"<{pri}>{ts} {host} {tag}: {message}"
 
-        # Also queue for Kuahene webhook delivery
+        # Also queue for Kahu webhook delivery
         try:
             _get_webhook().queue_alert(host, tag, message, facility, severity)
         except Exception:

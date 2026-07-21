@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from kuahene.main import app
+from kahu.main import app
 
 client = TestClient(app)
 

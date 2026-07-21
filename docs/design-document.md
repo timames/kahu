@@ -1,4 +1,4 @@
-# Kuahene — Design Document
+# Kahu — Design Document
 
 **Version:** 0.4.0 (Working Draft)
 **Date:** July 19, 2026
@@ -7,9 +7,9 @@
 
 ---
 
-## 1. What Is Kuahene
+## 1. What Is Kahu
 
-Kuahene is an on-premises AI security operations appliance. It combines Wazuh (SIEM/XDR), Ollama (local LLM inference), and a proprietary FastAPI orchestration layer into a single deployable stack that monitors, triages, investigates, and generates compliance evidence — all without any data leaving the customer's premises.
+Kahu is an on-premises AI security operations appliance. It combines Wazuh (SIEM/XDR), Ollama (local LLM inference), and a proprietary FastAPI orchestration layer into a single deployable stack that monitors, triages, investigates, and generates compliance evidence — all without any data leaving the customer's premises.
 
 The name means "remember" in Akan. The appliance remembers everything it sees, chains it cryptographically, and produces assessor-grade evidence as a byproduct of daily security operations.
 
@@ -29,7 +29,7 @@ The name means "remember" in Akan. The appliance remembers everything it sees, c
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Kuahene Appliance                        │
+│                        Kahu Appliance                        │
 │                                                                 │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
 │  │ Wazuh    │  │ Wazuh    │  │ Wazuh    │  │ Ollama       │   │
@@ -38,7 +38,7 @@ The name means "remember" in Akan. The appliance remembers everything it sees, c
 │  └────┬─────┘  └────┬─────┘  └──────────┘  └──────┬───────┘   │
 │       │              │                              │           │
 │  ┌────┴──────────────┴──────────────────────────────┴───────┐  │
-│  │                   Kuahene Core (:8000)                    │  │
+│  │                   Kahu Core (:8000)                    │  │
 │  │                                                           │  │
 │  │  ┌─────────────────────────────────────────────────────┐  │  │
 │  │  │              Triage Pipeline (4-Stage)               │  │  │
@@ -87,7 +87,7 @@ The name means "remember" in Akan. The appliance remembers everything it sees, c
 
 ### 5.1 Triage Pipeline
 
-The triage pipeline is the heart of Kuahene. Every alert passes through four sequential stages:
+The triage pipeline is the heart of Kahu. Every alert passes through four sequential stages:
 
 #### Stage 1: Filter (`services/triage/filters.py`)
 
@@ -179,7 +179,7 @@ AI-generated status summary displayed when an analyst opens the dashboard.
 - Most recent critical alert (description, host, timestamp)
 - Open vulnerability findings count
 
-**System prompt**: "You are Kuahene. Give a brief, direct security status briefing. Like a senior SOC analyst handing off a shift. 3-5 sentences max."
+**System prompt**: "You are Kahu. Give a brief, direct security status briefing. Like a senior SOC analyst handing off a shift. 3-5 sentences max."
 
 **Fallback (deterministic)**:
 - Critical alerts present → "Heads up — you have N critical and M high-severity alerts pending review..."
@@ -245,8 +245,8 @@ Framework-based compliance posture assessment with automated coverage mapping.
 
 **Coverage Matrix:**
 - Each control has `tags` (e.g., `audit_logging`, `incident_response`, `monitoring`)
-- Kuahene maps its capabilities to tags via `KUAHENE_EVIDENCE_MAP`
-- Coverage status: `automated` (evidence exists in alerts) > `capability` (Kuahene can provide) > `gap`
+- Kahu maps its capabilities to tags via `KAHU_EVIDENCE_MAP`
+- Coverage status: `automated` (evidence exists in alerts) > `capability` (Kahu can provide) > `gap`
 - Per-family and overall coverage percentage calculated dynamically
 
 **Compliance Profiles:** Activate a framework for an organization → track coverage over time.
@@ -255,7 +255,7 @@ Framework-based compliance posture assessment with automated coverage mapping.
 
 ### 5.8 Two-Plane Architecture (v0.4)
 
-Kuahene implements a strict two-plane model:
+Kahu implements a strict two-plane model:
 
 **Data Plane** — Always active, always air-gapped. Handles triage, investigation, evidence, and all telemetry processing using the local Ollama LLM. No external network access ever.
 
@@ -543,7 +543,7 @@ Single-page application served from `/static/index.html` via FastAPI's `StaticFi
 
 | Tab | Features |
 |-----|----------|
-| **Dashboard** | AI briefing card, "Ask Kuahene" chat, stat cards (pending/critical/model/pipeline), service health grid, recent alerts |
+| **Dashboard** | AI briefing card, "Ask Kahu" chat, stat cards (pending/critical/model/pipeline), service health grid, recent alerts |
 | **Triage Queue** | Full alert table, severity/disposition filters, auto-refresh (30s), click-to-detail modal with disposition form |
 | **Connectors** | Connector catalog browser, add wizard with dynamic config fields, instance list with activate/delete |
 | **Vulnerabilities** | Scan launcher (full/config/CVE), findings table with severity/category/CVSS, resolve/accept actions, scan history |
@@ -576,7 +576,7 @@ generator/
 ├── emitters.py     — Syslog (RFC3164/5424), NetFlow v5, SNMP v2c traps
 ├── scenarios.py    — Baseline noise + 9 triggerable attack scenarios
 ├── engine.py       — Baseline loop + scenario playback with threading
-├── webhook.py      — HTTP bridge: converts syslog → Kuahene ingest API calls
+├── webhook.py      — HTTP bridge: converts syslog → Kahu ingest API calls
 ├── main.py         — FastAPI control plane + phone-friendly HTML panel
 └── m365_events.py  — Real Microsoft 365 audit event generation (optional)
 ```
@@ -605,12 +605,12 @@ Diurnal activity curve modeling a 60-person engineering firm in Honolulu:
 
 ### Webhook Bridge
 
-The generator sends syslog to Wazuh AND posts alert payloads directly to Kuahene's `/api/triage/ingest` via a webhook emitter:
+The generator sends syslog to Wazuh AND posts alert payloads directly to Kahu's `/api/triage/ingest` via a webhook emitter:
 
 1. Every `syslog.send()` call also queues an alert in the webhook buffer
 2. Background thread flushes buffered alerts every 3 seconds
 3. Heuristic rule ID mapping converts syslog patterns to Wazuh-style alert structures
-4. Tolerates Kuahene unavailability (logs warning, continues)
+4. Tolerates Kahu unavailability (logs warning, continues)
 
 ### Synthetic Organization
 
@@ -635,7 +635,7 @@ The generator sends syslog to Wazuh AND posts alert payloads directly to Kuahene
 
 | Service | Image | Ports | Purpose |
 |---------|-------|-------|---------|
-| `core` | Custom (Dockerfile) | 8000 | Kuahene Core API + Dashboard |
+| `core` | Custom (Dockerfile) | 8000 | Kahu Core API + Dashboard |
 | `postgres` | postgres:16-alpine | 5432 | Alert/evidence/connector storage |
 | `redis` | redis:7-alpine | 6379 | Cache/state (future use) |
 | `ollama` | ollama/ollama:latest | 11434 | Local LLM inference (GPU) |
@@ -718,8 +718,8 @@ wazuh-indexer-certs-init → wazuh-indexer → wazuh-dashboard
 ## 13. Project Structure
 
 ```
-C:\pers\kuahene\
-├── src/kuahene/
+C:\pers\kahu\
+├── src/kahu/
 │   ├── main.py                    # FastAPI app, lifespan, static mount
 │   ├── config.py                  # Pydantic settings from .env
 │   ├── db.py                      # SQLAlchemy async engine/session
@@ -806,4 +806,4 @@ C:\pers\kuahene\
 
 ---
 
-*This document reflects the implemented state of Kuahene as of July 19, 2026. For the architectural vision document covering planned subsystems and open decisions, see `kuahene-architecture-v0.4.md`.*
+*This document reflects the implemented state of Kahu as of July 19, 2026. For the architectural vision document covering planned subsystems and open decisions, see `kahu-architecture-v0.4.md`.*

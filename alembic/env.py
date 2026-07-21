@@ -5,8 +5,8 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from kuahene.config import settings
-from kuahene.models import Base
+from kahu.config import settings
+from kahu.models import Base
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

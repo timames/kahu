@@ -1,4 +1,4 @@
-"""Generate Kuahene investor one-sheet as .docx"""
+"""Generate Kahu investor one-sheet as .docx"""
 
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor, Cm, Emu
@@ -92,7 +92,7 @@ def shade_cell(cell, color_hex):
 # ============================================================
 # HEADER
 # ============================================================
-add_colored_heading("KUAHENE", BRAND_DARK, size=28, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+add_colored_heading("KAHU", BRAND_DARK, size=28, alignment=WD_ALIGN_PARAGRAPH.LEFT)
 p = doc.add_paragraph()
 p.paragraph_format.space_before = Pt(0)
 p.paragraph_format.space_after = Pt(2)
@@ -139,7 +139,7 @@ add_body(
 # ============================================================
 add_section_header("The Solution")
 add_body(
-    "Kuahene is a turnkey security appliance that runs entirely on-premises. It combines a full "
+    "Kahu is a turnkey security appliance that runs entirely on-premises. It combines a full "
     "SIEM/XDR platform (Wazuh) with a locally-hosted AI engine (Ollama) and proprietary orchestration "
     "that automates alert triage, investigation, and compliance evidence generation \u2014 with zero data "
     "leaving the customer's network.",
@@ -235,7 +235,7 @@ add_bullet("Compliance automation reduces customer audit prep from weeks to hour
 # ============================================================
 # COMPETITIVE ADVANTAGE
 # ============================================================
-add_section_header("Why Kuahene Wins")
+add_section_header("Why Kahu Wins")
 add_bullet("No data leaves premises \u2014 a hard requirement for CMMC, ITAR, HIPAA, and CUI workloads that cloud SIEM cannot meet", bold_prefix="Data sovereignty: ")
 add_bullet("Compliance evidence generated automatically as a byproduct of security operations, not a separate workflow", bold_prefix="Evidence as byproduct: ")
 add_bullet("One appliance replaces SIEM + SOAR + GRC tool + vulnerability scanner \u2014 dramatic cost savings for SMBs", bold_prefix="Consolidation: ")
@@ -273,7 +273,7 @@ pBdr = parse_xml(
     f'</w:pBdr>'
 )
 p._p.get_or_add_pPr().append(pBdr)
-run = p.add_run("KUAHENE by ComplyHI")
+run = p.add_run("KAHU by ComplyHI")
 run.font.size = Pt(9)
 run.font.bold = True
 run.font.color.rgb = BRAND_DARK
@@ -284,6 +284,6 @@ run.font.color.rgb = GRAY
 run.font.name = "Calibri"
 
 # SAVE
-out_path = os.path.join(os.path.dirname(__file__), "Kuahene_Investor_OneSheet.docx")
+out_path = os.path.join(os.path.dirname(__file__), "Kahu_Investor_OneSheet.docx")
 doc.save(out_path)
 print(f"Saved to: {out_path}")

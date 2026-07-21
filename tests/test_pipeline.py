@@ -1,6 +1,6 @@
 """Tests for the triage pipeline orchestrator — severity bounding logic."""
 
-from kuahene.services.triage.pipeline import _bound_severity
+from kahu.services.triage.pipeline import _bound_severity
 
 
 class TestSeverityBounding:

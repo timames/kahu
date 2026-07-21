@@ -1,7 +1,7 @@
 [project]
-name = "kuahene-core"
+name = "kahu-core"
 version = "0.1.0"
-description = "Kuahene Core — on-premises AI security operations orchestration layer"
+description = "Kahu Core — on-premises AI security operations orchestration layer"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115,<1",
@@ -32,7 +32,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/kuahene"]
+packages = ["src/kahu"]
 
 [tool.ruff]
 target-version = "py312"

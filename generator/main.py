@@ -25,7 +25,7 @@ if not cfg.API_TOKEN:
               "control plane on a public host. Set API_TOKEN in .env")
     sys.exit(1)
 
-app = FastAPI(title="Kuahene Demo Generator", version="1.0")
+app = FastAPI(title="Kahu Demo Generator", version="1.0")
 
 
 def auth(x_demo_token: str = Header(default="")) -> None:
@@ -81,7 +81,7 @@ def baseline_stop() -> dict:
 PANEL = """<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kuahene Demo Control</title>
+<title>Kahu Demo Control</title>
 <style>
  :root{--bg:#0B1622;--card:#152638;--card2:#1C3149;--gold:#E8A33D;
        --teal:#3FB8AF;--text:#F2F6FA;--muted:#8FA3B8;--red:#E05A4E}
@@ -110,7 +110,7 @@ PANEL = """<!doctype html>
  .hist{font-size:12.5px;color:var(--muted);margin-top:4px}
  .hist div{padding:3px 0}
 </style></head><body>
-<h1>Kuahene &mdash; Demo Control</h1>
+<h1>Kahu &mdash; Demo Control</h1>
 <div class="sub">Baseline noise plus on-demand scenarios. Keep this on your phone.</div>
 <input class="tok" id="tok" type="password" placeholder="Demo token"
   onchange="save()" oninput="save()">

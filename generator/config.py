@@ -1,4 +1,4 @@
-"""Configuration for the Kuahene demo traffic generator.
+"""Configuration for the Kahu demo traffic generator.
 
 Everything is driven by environment variables so the same image runs against a
 lab appliance, a cloud demo appliance, or nothing at all (dry-run mode).
@@ -52,9 +52,9 @@ class Config:
     # There is no default on purpose - the container refuses to start without it.
     API_TOKEN = os.getenv("API_TOKEN", "")
 
-    # --- Kuahene ingest (webhook) ----------------------------------------
-    KUAHENE_HOST = os.getenv("KUAHENE_HOST", "kuahene-core:8000")
-    KUAHENE_INGEST_URL = os.getenv("KUAHENE_INGEST_URL", "")
+    # --- Kahu ingest (webhook) ----------------------------------------
+    KAHU_HOST = os.getenv("KAHU_HOST", "kahu-core:8000")
+    KAHU_INGEST_URL = os.getenv("KAHU_INGEST_URL", "")
 
     # --- synthetic org identity -----------------------------------------
     ORG_NAME = os.getenv("ORG_NAME", "Kai Pacific Engineering")

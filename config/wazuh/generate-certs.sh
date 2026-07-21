@@ -12,13 +12,13 @@ CERT_DIR="$SCRIPT_DIR/certs"
 mkdir -p "$CERT_DIR"
 
 DAYS=3650
-SUBJ_BASE="/C=US/ST=Hawaii/O=ComplyHI/OU=Kuahene"
+SUBJ_BASE="/C=US/ST=Hawaii/O=ComplyHI/OU=Kahu"
 
 echo "==> Generating root CA..."
 openssl genrsa -out "$CERT_DIR/root-ca-key.pem" 2048
 openssl req -new -x509 -sha256 -key "$CERT_DIR/root-ca-key.pem" \
   -out "$CERT_DIR/root-ca.pem" -days $DAYS \
-  -subj "$SUBJ_BASE/CN=Kuahene Root CA"
+  -subj "$SUBJ_BASE/CN=Kahu Root CA"
 
 generate_cert() {
   local name="$1"

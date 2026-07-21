@@ -1,4 +1,4 @@
-"""Webhook emitter — posts alert payloads to Kuahene's triage ingest API.
+"""Webhook emitter — posts alert payloads to Kahu's triage ingest API.
 
 This runs alongside the syslog emitter so the demo dashboard updates in
 real-time without requiring Wazuh decoder configuration.
@@ -15,8 +15,8 @@ from .config import cfg
 
 log = logging.getLogger("webhook")
 
-KUAHENE_INGEST_URL = cfg.KUAHENE_INGEST_URL or \
-    f"http://{cfg.KUAHENE_HOST}/api/triage/ingest"
+KAHU_INGEST_URL = cfg.KAHU_INGEST_URL or \
+    f"http://{cfg.KAHU_HOST}/api/triage/ingest"
 
 _lock = threading.Lock()
 _buffer: list[dict] = []
@@ -35,7 +35,7 @@ SEVERITY_MAP = {
 def queue_alert(host: str, tag: str, message: str,
                 facility: str = "local0", severity: str = "info",
                 rule_id: str | None = None, rule_desc: str | None = None) -> None:
-    """Queue an alert for batch delivery to Kuahene."""
+    """Queue an alert for batch delivery to Kahu."""
     level = SEVERITY_MAP.get(severity, 3)
     alert = {
         "id": f"{int(time.time())}.{_counter['sent'] + len(_buffer)}",
@@ -103,7 +103,7 @@ def _extract_ip(message: str) -> str:
 
 
 def _flush_loop() -> None:
-    """Background thread that flushes buffered alerts to Kuahene every 3 seconds."""
+    """Background thread that flushes buffered alerts to Kahu every 3 seconds."""
     while not _stop.is_set():
         time.sleep(3.0)
         _flush()
@@ -118,10 +118,10 @@ def _flush() -> None:
 
     try:
         with httpx.Client(timeout=10.0) as client:
-            resp = client.post(KUAHENE_INGEST_URL, json={"alerts": batch})
+            resp = client.post(KAHU_INGEST_URL, json={"alerts": batch})
             if resp.status_code == 200:
                 _counter["sent"] += len(batch)
-                log.info("webhook: flushed %d alerts to Kuahene", len(batch))
+                log.info("webhook: flushed %d alerts to Kahu", len(batch))
             else:
                 _counter["errors"] += len(batch)
                 log.warning("webhook: ingest returned %d: %s",
@@ -139,7 +139,7 @@ def start() -> None:
     _stop.clear()
     _flush_thread = threading.Thread(target=_flush_loop, daemon=True)
     _flush_thread.start()
-    log.info("webhook: emitter started → %s", KUAHENE_INGEST_URL)
+    log.info("webhook: emitter started → %s", KAHU_INGEST_URL)
 
 
 def stop() -> None:

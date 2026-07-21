@@ -1,6 +1,6 @@
 """Tests for Stage 1 — Deterministic filtering."""
 
-from kuahene.services.triage.filters import (
+from kahu.services.triage.filters import (
     DeduplicationWindow,
     apply_deterministic_filters,
 )

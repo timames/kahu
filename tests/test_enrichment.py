@@ -2,7 +2,7 @@
 
 import pytest
 
-from kuahene.services.triage.enrichment import (
+from kahu.services.triage.enrichment import (
     EnrichedAlert,
     _extract_asset_context,
     _parse_wazuh_timestamp,

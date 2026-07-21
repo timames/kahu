@@ -3,7 +3,7 @@
 
 This performs legitimate administrative actions in a tenant you control, so
 that genuine sign-in logs, audit logs, and Entra events appear in Graph - and
-therefore in Kuahene via the M365 connector. Nothing here touches any system
+therefore in Kahu via the M365 connector. Nothing here touches any system
 you do not own.
 
 Prerequisites
@@ -22,7 +22,7 @@ Usage
     python m365_events.py oversharing     # anonymous sharing link on a test file
     python m365_events.py cleanup         # remove everything this script made
 
-Every object created is prefixed 'kuahene-demo-' so cleanup is unambiguous.
+Every object created is prefixed 'kahu-demo-' so cleanup is unambiguous.
 """
 import os
 import sys
@@ -35,7 +35,7 @@ TENANT = os.getenv("M365_TENANT_ID", "")
 CLIENT = os.getenv("M365_CLIENT_ID", "")
 SECRET = os.getenv("M365_CLIENT_SECRET", "")
 GRAPH = "https://graph.microsoft.com/v1.0"
-PREFIX = "kuahene-demo-"
+PREFIX = "kahu-demo-"
 
 
 def token() -> str:
@@ -200,7 +200,7 @@ def oversharing(tok: str) -> None:
         f"{GRAPH}/drives/{drive}/root:/{name}:/content",
         headers={"Authorization": f"Bearer {tok}",
                  "Content-Type": "text/plain"},
-        data=b"Demo content for Kuahene sharing-link scenario. Not real data.",
+        data=b"Demo content for Kahu sharing-link scenario. Not real data.",
         timeout=30,
     )
     up.raise_for_status()

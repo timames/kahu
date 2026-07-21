@@ -1,6 +1,6 @@
-# Kuahene Demo Stack
+# Kahu Demo Stack
 
-A cloud-hosted traffic generator that makes a Kuahene appliance look like it is
+A cloud-hosted traffic generator that makes a Kahu appliance look like it is
 watching a real 60-person engineering firm — plus nine scenarios you can fire
 from your phone mid-presentation.
 
@@ -25,7 +25,7 @@ developer tenant.
 
 ## ⚠️ Read this before you deploy
 
-The Kuahene architecture says the appliance **never accepts inbound WAN
+The Kahu architecture says the appliance **never accepts inbound WAN
 connections**. A cloud generator sending syslog to a public IP would violate
 that on your own demo box, and worse, would leave 514/udp open to the internet
 for anyone to spray. Don't.
@@ -48,7 +48,7 @@ See `ops/README.md` for the WireGuard setup.
 Any 2 vCPU / 4 GB VPS will do — the generator is I/O bound and idles near zero.
 
 ```bash
-git clone <your-repo> kuahene-demo && cd kuahene-demo
+git clone <your-repo> kahu-demo && cd kahu-demo
 cp .env.example .env
 openssl rand -hex 24        # paste into API_TOKEN
 vim .env                    # set TARGET_HOST and API_TOKEN
@@ -123,7 +123,7 @@ python m365/m365_events.py oversharing     # anonymous sharing link
 python m365/m365_events.py cleanup         # delete everything it made
 ```
 
-Every object it creates is prefixed `kuahene-demo-`, so `cleanup` is
+Every object it creates is prefixed `kahu-demo-`, so `cleanup` is
 unambiguous. Run it after every demo.
 
 **The free geography trick:** your generator VPS is not in Hawaii. Sign into the

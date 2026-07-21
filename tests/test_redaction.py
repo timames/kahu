@@ -1,4 +1,4 @@
-from kuahene.clients.redaction import redact_secrets
+from kahu.clients.redaction import redact_secrets
 
 
 def test_redacts_password():

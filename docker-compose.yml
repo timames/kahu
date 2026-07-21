@@ -20,13 +20,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: kuahene
+      POSTGRES_USER: kahu
       POSTGRES_PASSWORD: changeme
-      POSTGRES_DB: kuahene
+      POSTGRES_DB: kahu
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kuahene"]
+      test: ["CMD-SHELL", "pg_isready -U kahu"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -75,7 +75,7 @@ services:
       SSL_CERTIFICATE: /etc/ssl/filebeat.pem
       SSL_KEY: /etc/ssl/filebeat-key.pem
       API_USERNAME: wazuh-wui
-      API_PASSWORD: Kuahene@Wazuh2026!
+      API_PASSWORD: Kahu@Wazuh2026!
     volumes:
       - wazuh-api-config:/var/ossec/api/configuration
       - wazuh-etc:/var/ossec/etc
@@ -147,7 +147,7 @@ services:
       DASHBOARD_USERNAME: kibanaserver
       DASHBOARD_PASSWORD: kibanaserver
       API_USERNAME: wazuh-wui
-      API_PASSWORD: Kuahene@Wazuh2026!
+      API_PASSWORD: Kahu@Wazuh2026!
       SERVER_SSL_ENABLED: "true"
       SERVER_SSL_CERTIFICATE: /usr/share/wazuh-dashboard/certs/dashboard.pem
       SERVER_SSL_KEY: /usr/share/wazuh-dashboard/certs/dashboard-key.pem
@@ -169,7 +169,7 @@ services:
 
   generator:
     build: ./generator
-    container_name: kuahene-generator
+    container_name: kahu-generator
     restart: unless-stopped
     environment:
       TARGET_HOST: wazuh-manager
@@ -180,7 +180,7 @@ services:
       INTENSITY: "1.0"
       TIMEZONE: Pacific/Honolulu
       API_TOKEN: demo-local-token
-      KUAHENE_HOST: core:8000
+      KAHU_HOST: core:8000
     ports:
       - "8080:8080"
     depends_on:

@@ -2,8 +2,8 @@
 
 import json
 
-from kuahene.services.triage.enrichment import EnrichedAlert
-from kuahene.services.triage.llm_triage import (
+from kahu.services.triage.enrichment import EnrichedAlert
+from kahu.services.triage.llm_triage import (
     _build_prompt_data,
     _degraded_result,
     _parse_llm_response,
