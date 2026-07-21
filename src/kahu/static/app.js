@@ -4,6 +4,7 @@ const API = '/api/m';
 const TRIAGE_API = '/api/triage';
 const INVEST_API = '/api/investigation';
 const CONN_API = '/api/connectors';
+const COMP_API = '/api/compliance';
 let currentScreen = 'glance';
 let feedCards = [];
 let feedRemaining = 0;
@@ -22,6 +23,7 @@ function navigate(screen) {
   if (screen === 'feed') loadFeed();
   if (screen === 'score') loadScore();
   if (screen === 'profile') loadProfile();
+  if (screen === 'compliance') loadCompliance();
   if (screen === 'sources') loadSources();
   if (screen === 'settings') loadSettings();
 }
@@ -1231,6 +1233,186 @@ function closeAddSource() {
   if (currentScreen === 'sources') loadSources();
 }
 
+// ---- Compliance Screen ----
+
+let compActiveFramework = null;
+let compFrameworks = [];
+
+async function loadCompliance() {
+  const tabsEl = document.getElementById('comp-fw-tabs');
+  const summaryEl = document.getElementById('comp-coverage-summary');
+  const familiesEl = document.getElementById('comp-families');
+  const statsEl = document.getElementById('comp-evidence-stats');
+
+  // Load frameworks list (once)
+  if (!compFrameworks.length) {
+    const fwData = await api(`${COMP_API}/frameworks`);
+    if (fwData._offline) return;
+    compFrameworks = fwData.frameworks || [];
+  }
+
+  // Load evidence summary
+  const evSummary = await api(`${COMP_API}/evidence/summary`);
+  if (evSummary && !evSummary._offline) {
+    statsEl.innerHTML = `
+      <div class="comp-stat"><span class="comp-stat-val">${evSummary.total_records || 0}</span><span class="comp-stat-lbl">Evidence Records</span></div>
+      <div class="comp-stat"><span class="comp-stat-val">${evSummary.chain_intact ? 'Intact' : 'Broken'}</span><span class="comp-stat-lbl">Hash Chain</span></div>
+      <div class="comp-stat"><span class="comp-stat-val">${evSummary.latest_timestamp ? formatTimeAgo(new Date(evSummary.latest_timestamp)) : '--'}</span><span class="comp-stat-lbl">Last Record</span></div>
+    `;
+  }
+
+  // Render framework tabs
+  if (!compActiveFramework && compFrameworks.length) {
+    compActiveFramework = compFrameworks[0].id;
+  }
+  tabsEl.innerHTML = compFrameworks.map(fw =>
+    `<button class="comp-fw-tab${fw.id === compActiveFramework ? ' active' : ''}" onclick="selectFramework('${fw.id}')">${escHtml(fw.name)}</button>`
+  ).join('');
+
+  // Load coverage for active framework
+  if (compActiveFramework) {
+    await loadCoverage(compActiveFramework);
+  }
+}
+
+function selectFramework(fwId) {
+  compActiveFramework = fwId;
+  document.querySelectorAll('.comp-fw-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.comp-fw-tab[onclick*="${fwId}"]`)?.classList.add('active');
+  loadCoverage(fwId);
+}
+
+async function loadCoverage(fwId) {
+  const summaryEl = document.getElementById('comp-coverage-summary');
+  const familiesEl = document.getElementById('comp-families');
+
+  summaryEl.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  familiesEl.innerHTML = '';
+
+  const data = await api(`${COMP_API}/frameworks/${fwId}/coverage`);
+  if (data._offline || !data.framework_id) {
+    summaryEl.innerHTML = '<p style="color:var(--text-dim)">Could not load coverage data.</p>';
+    return;
+  }
+
+  // Coverage ring
+  const pct = data.coverage_pct || 0;
+  const color = pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)';
+  const dashOffset = 283 - (283 * pct / 100);
+
+  summaryEl.innerHTML = `
+    <div class="comp-ring-wrap">
+      <svg class="comp-ring" viewBox="0 0 100 100">
+        <circle class="comp-ring-bg" cx="50" cy="50" r="45"/>
+        <circle class="comp-ring-fill" cx="50" cy="50" r="45"
+          stroke="${color}" stroke-dasharray="283" stroke-dashoffset="${dashOffset}"/>
+      </svg>
+      <div class="comp-ring-text">
+        <span class="comp-ring-pct">${Math.round(pct)}%</span>
+        <span class="comp-ring-lbl">Coverage</span>
+      </div>
+    </div>
+    <div class="comp-summary-stats">
+      <div><strong>${data.covered_controls}</strong> of <strong>${data.total_controls}</strong> controls covered</div>
+      <div class="comp-summary-name">${escHtml(data.framework_name)}</div>
+    </div>
+  `;
+
+  // Family breakdown
+  familiesEl.innerHTML = data.families.map(fam => {
+    const famPct = fam.coverage_pct || 0;
+    const famColor = famPct >= 75 ? 'var(--green)' : famPct >= 50 ? 'var(--yellow)' : 'var(--red)';
+    const covered = fam.controls.filter(c => c.covered).length;
+    const total = fam.controls.length;
+
+    return `
+      <div class="comp-family">
+        <div class="comp-family-header" onclick="toggleFamily(this)">
+          <div class="comp-family-info">
+            <span class="comp-family-id">${escHtml(fam.family_id)}</span>
+            <span class="comp-family-name">${escHtml(fam.family_name)}</span>
+          </div>
+          <div class="comp-family-bar-wrap">
+            <div class="comp-family-bar">
+              <div class="comp-family-bar-fill" style="width:${famPct}%;background:${famColor}"></div>
+            </div>
+            <span class="comp-family-pct">${covered}/${total}</span>
+          </div>
+          <svg class="comp-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="comp-family-controls" style="display:none">
+          ${fam.controls.map(ctrl => `
+            <div class="comp-control ${ctrl.covered ? 'covered' : 'gap'}">
+              <div class="comp-control-status">${ctrl.covered ? (ctrl.evidence_type === 'automated' ? '<span class="ctrl-dot auto"></span>' : '<span class="ctrl-dot cap"></span>') : '<span class="ctrl-dot gap"></span>'}</div>
+              <div class="comp-control-info">
+                <div class="comp-control-id">${escHtml(ctrl.id)}</div>
+                <div class="comp-control-title">${escHtml(ctrl.title)}</div>
+                ${ctrl.coverage_source ? `<div class="comp-control-source">${escHtml(ctrl.coverage_source)}</div>` : ''}
+              </div>
+              <button class="comp-evidence-btn" onclick="openEvidence('${escHtml(ctrl.id)}','${escHtml(ctrl.title)}')">Evidence</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleFamily(header) {
+  const controls = header.nextElementSibling;
+  const chevron = header.querySelector('.comp-chevron');
+  if (controls.style.display === 'none') {
+    controls.style.display = 'block';
+    chevron.style.transform = 'rotate(180deg)';
+  } else {
+    controls.style.display = 'none';
+    chevron.style.transform = '';
+  }
+}
+
+async function openEvidence(controlId, controlTitle) {
+  const modal = document.getElementById('evidence-modal');
+  const header = document.getElementById('evidence-modal-header');
+  const list = document.getElementById('evidence-list');
+
+  header.innerHTML = `<h3>Evidence: ${escHtml(controlId)}</h3><p class="evidence-subtitle">${escHtml(controlTitle)}</p>`;
+  list.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  modal.classList.add('active');
+
+  const data = await api(`${COMP_API}/evidence?control_id=${encodeURIComponent(controlId)}&limit=50`);
+  if (data._offline || !data.records) {
+    list.innerHTML = '<p style="color:var(--text-dim);padding:20px;text-align:center">No evidence records found.</p>';
+    return;
+  }
+
+  if (!data.records.length) {
+    list.innerHTML = '<p style="color:var(--text-dim);padding:20px;text-align:center">No evidence records match this control yet.</p>';
+    return;
+  }
+
+  list.innerHTML = data.records.map(r => `
+    <div class="evidence-record">
+      <div class="evidence-record-header">
+        <span class="evidence-type ${r.event_type}">${escHtml(r.event_type.replace(/_/g, ' '))}</span>
+        <span class="evidence-time">${formatTimeAgo(new Date(r.timestamp))}</span>
+      </div>
+      <div class="evidence-record-body">
+        ${r.payload ? Object.entries(r.payload).map(([k,v]) =>
+          `<div class="evidence-kv"><span class="evidence-key">${escHtml(k)}</span><span class="evidence-val">${escHtml(String(v))}</span></div>`
+        ).join('') : ''}
+      </div>
+      <div class="evidence-record-footer">
+        <span class="evidence-actor">${escHtml(r.actor || 'system')}</span>
+        <span class="evidence-hash" title="Record hash">#${r.record_hash}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function closeEvidenceModal() {
+  document.getElementById('evidence-modal').classList.remove('active');
+}
+
 // ---- Utilities ----
 
 function escHtml(s) {
@@ -1276,6 +1458,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (modal) {
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeCoach();
+    });
+  }
+  const evModal = document.getElementById('evidence-modal');
+  if (evModal) {
+    evModal.addEventListener('click', (e) => {
+      if (e.target === evModal) closeEvidenceModal();
     });
   }
   const srcModal = document.getElementById('add-source-modal');

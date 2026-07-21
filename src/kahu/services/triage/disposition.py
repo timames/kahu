@@ -33,6 +33,9 @@ ALERT_RAISED_CONTROLS = [
     "HIPAA:164.312(b)",  # Audit controls
     "CIS:8.2",         # Collect audit logs
     "CIS:8.5",         # Collect detailed audit logs
+    "SOC2:CC2.1",      # Generated info for system controls
+    "SOC2:CC7.1",      # Detection and monitoring
+    "SOC2:CC7.2",      # Monitor for anomalies
 ]
 
 ALERT_DISPOSITIONED_CONTROLS = [
@@ -40,6 +43,8 @@ ALERT_DISPOSITIONED_CONTROLS = [
     "800-171:3.6.2",   # Track/document/report incidents
     "HIPAA:164.308(a)(6)(ii)",  # Response and reporting
     "CIS:17.4",        # Establish incident handling process
+    "SOC2:CC7.3",      # Evaluate security events
+    "SOC2:CC7.4",      # Respond to identified incidents
 ]
 
 

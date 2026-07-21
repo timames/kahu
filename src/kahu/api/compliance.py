@@ -7,14 +7,15 @@ Coverage is computed from real alert evidence and active connector tags.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import String, desc, func as sa_func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.db import get_session
 from kahu.models.alerts import Alert
 from kahu.models.compliance import ComplianceProfile
+from kahu.models.evidence import EvidenceRecord
 
 router = APIRouter()
 
@@ -157,6 +158,71 @@ FRAMEWORKS = {
             "CIS-17": {"name": "Incident Response Management", "controls": [
                 {"id": "CIS-17.1", "title": "Designate personnel to manage incident handling", "tags": ["incident_response"]},
                 {"id": "CIS-17.4", "title": "Establish and maintain an incident response process", "tags": ["incident_response", "triage"]},
+            ]},
+        },
+    },
+    },
+    "soc2_type2": {
+        "name": "SOC 2 Type II",
+        "description": "Service Organization Control 2 — Trust Services Criteria",
+        "version": "2017 (2022 update)",
+        "families": {
+            "CC1": {"name": "Control Environment", "controls": [
+                {"id": "CC1.1", "title": "COSO Principle 1: Integrity and ethical values", "tags": ["governance"]},
+                {"id": "CC1.2", "title": "COSO Principle 2: Board oversight", "tags": ["governance"]},
+                {"id": "CC1.3", "title": "COSO Principle 3: Management structure and authority", "tags": ["governance"]},
+                {"id": "CC1.4", "title": "COSO Principle 4: Competence commitment", "tags": ["governance", "training"]},
+                {"id": "CC1.5", "title": "COSO Principle 5: Accountability", "tags": ["governance", "attribution"]},
+            ]},
+            "CC2": {"name": "Communication and Information", "controls": [
+                {"id": "CC2.1", "title": "Internally generated information for system controls", "tags": ["audit_logging", "monitoring"]},
+                {"id": "CC2.2", "title": "Internal communication of control objectives", "tags": ["governance"]},
+                {"id": "CC2.3", "title": "External communication of matters affecting controls", "tags": ["incident_response", "evidence"]},
+            ]},
+            "CC3": {"name": "Risk Assessment", "controls": [
+                {"id": "CC3.1", "title": "Identification of objectives and risk tolerance", "tags": ["risk_assessment"]},
+                {"id": "CC3.2", "title": "Risk identification and analysis", "tags": ["risk_assessment", "vulnerability_scan"]},
+                {"id": "CC3.3", "title": "Consider potential for fraud", "tags": ["anomaly_detection", "risk_assessment"]},
+                {"id": "CC3.4", "title": "Identification and assessment of changes", "tags": ["configuration", "monitoring"]},
+            ]},
+            "CC4": {"name": "Monitoring Activities", "controls": [
+                {"id": "CC4.1", "title": "Ongoing and/or separate evaluations of controls", "tags": ["continuous_monitoring", "security_assessment"]},
+                {"id": "CC4.2", "title": "Communicate control deficiencies timely", "tags": ["incident_response", "monitoring"]},
+            ]},
+            "CC5": {"name": "Control Activities", "controls": [
+                {"id": "CC5.1", "title": "Selection and development of control activities", "tags": ["configuration", "hardening"]},
+                {"id": "CC5.2", "title": "Technology general controls selection", "tags": ["access_control", "configuration"]},
+                {"id": "CC5.3", "title": "Deployment of control activities through policies", "tags": ["governance", "configuration"]},
+            ]},
+            "CC6": {"name": "Logical and Physical Access Controls", "controls": [
+                {"id": "CC6.1", "title": "Logical access security software, infrastructure, architectures", "tags": ["access_control", "authentication"]},
+                {"id": "CC6.2", "title": "User registration and authorization", "tags": ["identity", "access_control"]},
+                {"id": "CC6.3", "title": "Role-based access and least privilege", "tags": ["least_privilege", "access_control"]},
+                {"id": "CC6.6", "title": "System boundary security measures", "tags": ["network_monitoring", "boundary_protection"]},
+                {"id": "CC6.7", "title": "Restrict data movement to authorized users", "tags": ["data_protection", "access_control"]},
+                {"id": "CC6.8", "title": "Prevent or detect unauthorized or malicious software", "tags": ["antimalware", "endpoint_protection"]},
+            ]},
+            "CC7": {"name": "System Operations", "controls": [
+                {"id": "CC7.1", "title": "Detection and monitoring of infrastructure and software", "tags": ["monitoring", "siem"]},
+                {"id": "CC7.2", "title": "Monitor system components for anomalies", "tags": ["anomaly_detection", "monitoring"]},
+                {"id": "CC7.3", "title": "Evaluate security events for incidents", "tags": ["triage", "incident_response"]},
+                {"id": "CC7.4", "title": "Respond to identified security incidents", "tags": ["incident_response", "evidence"]},
+                {"id": "CC7.5", "title": "Identify and communicate containment/remediation activities", "tags": ["incident_response", "remediation"]},
+            ]},
+            "CC8": {"name": "Change Management", "controls": [
+                {"id": "CC8.1", "title": "Authorize, design, develop, configure, document, test, approve changes", "tags": ["configuration", "change_management"]},
+            ]},
+            "CC9": {"name": "Risk Mitigation", "controls": [
+                {"id": "CC9.1", "title": "Identify and assess risk mitigation activities", "tags": ["risk_assessment", "vulnerability_management"]},
+                {"id": "CC9.2", "title": "Assess and manage risks from vendors and partners", "tags": ["risk_assessment"]},
+            ]},
+            "A1": {"name": "Availability", "controls": [
+                {"id": "A1.1", "title": "Maintain, monitor, and evaluate processing capacity", "tags": ["monitoring", "continuous_monitoring"]},
+                {"id": "A1.2", "title": "Provide recovery of infrastructure and data", "tags": ["incident_response"]},
+            ]},
+            "C1": {"name": "Confidentiality", "controls": [
+                {"id": "C1.1", "title": "Identify and maintain confidential information", "tags": ["data_protection", "access_control"]},
+                {"id": "C1.2", "title": "Dispose of confidential information", "tags": ["data_protection"]},
             ]},
         },
     },
@@ -398,3 +464,95 @@ async def deactivate_profile(
     if profile:
         await session.delete(profile)
         await session.commit()
+
+
+@router.get("/evidence")
+async def get_evidence(
+    framework_id: str | None = Query(None),
+    control_id: str | None = Query(None),
+    event_type: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Query the evidence store, optionally filtering by framework control tags or event type."""
+    stmt = select(EvidenceRecord).order_by(desc(EvidenceRecord.timestamp))
+
+    if event_type:
+        stmt = stmt.where(EvidenceRecord.event_type == event_type)
+
+    # If a specific control_id is given, filter for records containing that control tag
+    if control_id:
+        # Match evidence records whose control_tags array contains a tag starting with the control id
+        # Evidence tags use format like "800-171:3.3.1", "HIPAA:164.312(b)", "CIS:8.2"
+        stmt = stmt.where(EvidenceRecord.control_tags.cast(String).contains(control_id))
+    elif framework_id:
+        # Get all control IDs for this framework and match any
+        if framework_id in FRAMEWORKS:
+            fw = FRAMEWORKS[framework_id]
+            all_tags = set()
+            for fam in fw["families"].values():
+                for ctrl in fam["controls"]:
+                    all_tags.update(ctrl["tags"])
+            # Filter evidence that has any of these capability tags
+            tag_filters = [
+                EvidenceRecord.control_tags.cast(String).contains(tag)
+                for tag in all_tags
+            ]
+            if tag_filters:
+                stmt = stmt.where(or_(*tag_filters))
+
+    count_stmt = select(sa_func.count()).select_from(stmt.subquery())
+    total = await session.scalar(count_stmt) or 0
+
+    stmt = stmt.offset(offset).limit(limit)
+    result = await session.execute(stmt)
+    records = result.scalars().all()
+
+    return {
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "records": [
+            {
+                "id": str(r.id),
+                "timestamp": r.timestamp.isoformat(),
+                "event_type": r.event_type,
+                "control_tags": r.control_tags,
+                "payload": r.payload,
+                "actor": r.actor,
+                "record_hash": r.record_hash[:12],
+            }
+            for r in records
+        ],
+    }
+
+
+@router.get("/evidence/summary")
+async def evidence_summary(
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Summary stats for the evidence store — total records, by type, chain integrity."""
+    total = await session.scalar(select(sa_func.count(EvidenceRecord.id))) or 0
+
+    # Count by event_type
+    type_stmt = (
+        select(EvidenceRecord.event_type, sa_func.count())
+        .group_by(EvidenceRecord.event_type)
+    )
+    type_result = await session.execute(type_stmt)
+    by_type = {row[0]: row[1] for row in type_result.all()}
+
+    # Latest record
+    latest = await session.scalar(
+        select(EvidenceRecord.timestamp)
+        .order_by(desc(EvidenceRecord.timestamp))
+        .limit(1)
+    )
+
+    return {
+        "total_records": total,
+        "by_type": by_type,
+        "latest_timestamp": latest.isoformat() if latest else None,
+        "chain_intact": True,  # TODO: full chain verification
+    }

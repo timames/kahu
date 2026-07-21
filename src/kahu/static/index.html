@@ -169,6 +169,30 @@
     </div>
   </div>
 
+  <!-- ===== COMPLIANCE ===== -->
+  <div id="screen-compliance" class="screen">
+    <div class="comp-header">
+      <h2>Compliance</h2>
+      <div id="comp-evidence-stats" class="comp-evidence-stats"></div>
+    </div>
+
+    <div id="comp-fw-tabs" class="comp-fw-tabs"></div>
+
+    <div id="comp-coverage-summary" class="comp-coverage-summary"></div>
+
+    <div id="comp-families" class="comp-families"></div>
+  </div>
+
+  <!-- ===== EVIDENCE DETAIL MODAL ===== -->
+  <div id="evidence-modal" class="modal-overlay">
+    <div class="modal-sheet modal-tall">
+      <div class="modal-handle"></div>
+      <div id="evidence-modal-header" class="evidence-modal-header"></div>
+      <div id="evidence-list" class="evidence-list"></div>
+      <button class="modal-close" onclick="closeEvidenceModal()">Close</button>
+    </div>
+  </div>
+
   <!-- ===== SETTINGS ===== -->
   <div id="screen-settings" class="screen">
     <div class="settings-group">
@@ -280,6 +304,10 @@
     <button data-screen="profile" onclick="navigate('profile')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       <span>Profile</span>
+    </button>
+    <button data-screen="compliance" onclick="navigate('compliance')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span>Comply</span>
     </button>
     <button data-screen="sources" onclick="navigate('sources')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
