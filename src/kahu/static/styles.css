@@ -2520,8 +2520,12 @@ nav .badge {
 
 /* Desktop: constrain width, center */
 @media (min-width: 521px) {
+  #app {
+    max-width: 100%;
+  }
   nav {
     left: 50%;
+    right: auto;
     transform: translateX(-50%);
   }
 }

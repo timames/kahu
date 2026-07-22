@@ -30,6 +30,12 @@ SUPPRESSED_RULE_IDS: set[str] = {
     "86003",  # Wazuh agent reconnected
     "5104",   # Interface entered promiscuous mode (Docker/Hyper-V noise)
     "5302",   # User login session closed (excessive volume)
+    "502",    # Ossec server started (manager self-monitoring)
+    "510",    # Host-based anomaly detection — rootcheck (manager self-scan noise)
+    "550",    # Integrity checksum changed (manager self-monitoring)
+    "5501",   # Windows logon success (EventID 4624) — routine login noise
+    "5701",   # Antivirus scan completed — operational noise
+    "5000",   # WiFi AP client connected — network device chatter
 }
 
 # Rules that must never be suppressed regardless of level or dedup.
