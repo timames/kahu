@@ -60,7 +60,7 @@ services:
       start_period: 60s
 
   wazuh-manager:
-    image: wazuh/wazuh-manager:4.9.2
+    image: wazuh/wazuh-manager:4.14.1
     hostname: wazuh-manager
     ports:
       - "1514:1514"
@@ -70,7 +70,7 @@ services:
       INDEXER_URL: https://wazuh-indexer:9200
       INDEXER_USERNAME: admin
       INDEXER_PASSWORD: admin
-      FILEBEAT_SSL_VERIFICATION_MODE: full
+      FILEBEAT_SSL_VERIFICATION_MODE: none
       SSL_CERTIFICATE_AUTHORITIES: /etc/ssl/root-ca.pem
       SSL_CERTIFICATE: /etc/ssl/filebeat.pem
       SSL_KEY: /etc/ssl/filebeat-key.pem
@@ -106,7 +106,7 @@ services:
     command: ["sh", "-c", "cp /src-certs/indexer.pem /src-certs/indexer-key.pem /src-certs/root-ca.pem /src-certs/admin.pem /src-certs/admin-key.pem /usr/share/wazuh-indexer/certs/ && chown -R 1000:1000 /usr/share/wazuh-indexer/certs && chmod 600 /usr/share/wazuh-indexer/certs/*-key.pem && chmod 644 /usr/share/wazuh-indexer/certs/*.pem && echo Certs ready"]
 
   wazuh-indexer:
-    image: wazuh/wazuh-indexer:4.9.2
+    image: wazuh/wazuh-indexer:4.14.1
     hostname: wazuh-indexer
     ports:
       - "9200:9200"
@@ -136,7 +136,7 @@ services:
       start_period: 60s
 
   wazuh-dashboard:
-    image: wazuh/wazuh-dashboard:4.9.2
+    image: wazuh/wazuh-dashboard:4.14.1
     hostname: wazuh-dashboard
     ports:
       - "443:5601"

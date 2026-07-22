@@ -293,9 +293,6 @@ async function doSwipe(card, direction) {
     // If escalated/confirmed and ticket created, show ticket confirmation
     if (result.ticket_id && (direction === 'up' || direction === 'right')) {
       setTimeout(() => showTicketConfirmation(result, card, direction), 400);
-    } else {
-      // Show coach modal after a moment
-      setTimeout(() => showCoach(card.id), 600);
     }
 
     // Re-render
