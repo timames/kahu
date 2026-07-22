@@ -85,6 +85,11 @@ html, body {
   flex-shrink: 0;
 }
 
+#screen-glance {
+  justify-content: center;
+  align-items: center;
+}
+
 /* ---- Bottom Nav ---- */
 
 nav {
