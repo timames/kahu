@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "components": {
+    "detection_posture": {
+      "weight": 25,
+      "subweights": {
+        "update_freshness": 0.25,
+        "content_age": 0.20,
+        "canary_pass_rate": 0.20,
+        "sensor_health": 0.20,
+        "log_source_coverage": 0.15
+      },
+      "staleness_threshold_days": 7
+    },
+    "tuning_hygiene": {
+      "weight": 15,
+      "subweights": {
+        "active_suppression_count": 0.25,
+        "mean_tune_age": 0.25,
+        "expired_unreviewed": 0.25,
+        "drift_flags_unacked": 0.25
+      }
+    },
+    "vulnerability_posture": {
+      "weight": 20,
+      "subweights": {
+        "findings_weighted": 0.50,
+        "remediation_velocity": 0.50
+      }
+    },
+    "identity_access": {
+      "weight": 15,
+      "subweights": {
+        "mfa_coverage": 0.30,
+        "stale_accounts": 0.25,
+        "admin_count": 0.25,
+        "secret_age": 0.20
+      }
+    },
+    "response_readiness": {
+      "weight": 15,
+      "subweights": {
+        "median_ack_time": 0.35,
+        "cases_past_sla": 0.35,
+        "playbook_success_rate": 0.30
+      }
+    },
+    "human_layer": {
+      "weight": 10,
+      "subweights": {
+        "training_completion": 0.50,
+        "training_recency": 0.50
+      }
+    }
+  },
+  "freshness_decay_delta": 0.992,
+  "not_assessed_ceiling_pct": 0.40,
+  "pono_drop_threshold": 5
+}

@@ -1,0 +1,18 @@
+{
+  "kappa_1h": 24,
+  "kappa_24h": 168,
+  "kappa_7d": 720,
+  "kappa_90d": 2160,
+  "fleet_alpha": 0.5,
+  "fleet_beta": 0.5,
+  "gamma_elevated": 3.0,
+  "prior_odds": 1.0,
+  "theta_base": 20.0,
+  "decay_delta": 0.992,
+  "kl_epsilon_default": 0.5,
+  "seasonality_min_events": 500,
+  "seasonality_business_hours": [7, 18],
+  "seasonality_business_days": [0, 1, 2, 3, 4],
+  "auto_apply": false,
+  "engine_version": "0.1.0"
+}

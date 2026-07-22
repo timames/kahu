@@ -1,0 +1,5 @@
+{
+  "canary_rule_ids": [],
+  "inject_timeout_seconds": 120,
+  "test_index": "kahu-canary-events"
+}
