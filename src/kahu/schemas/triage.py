@@ -56,12 +56,33 @@ class DispositionOut(BaseModel):
     created_at: datetime
 
 
+class HistoryAlertSummary(BaseModel):
+    id: uuid.UUID
+    wazuh_alert_id: str
+    rule_id: str
+    rule_description: str
+    severity: str
+    agent_name: str | None
+    created_at: datetime
+    verdict: str | None = None
+    analyst: str | None = None
+    disposition_at: datetime | None = None
+    llm_explanation: str | None = None
+
+
 class TriageQueueResponse(BaseModel):
     alerts: list[AlertSummary]
     total: int
     offset: int
     limit: int
     degraded: bool = False
+
+
+class HistoryResponse(BaseModel):
+    alerts: list[HistoryAlertSummary]
+    total: int
+    offset: int
+    limit: int
 
 
 class PipelineBatchRequest(BaseModel):

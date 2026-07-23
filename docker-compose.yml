@@ -161,6 +161,7 @@ services:
       - ./config/wazuh/certs/dashboard.pem:/etc/wazuh-dashboard/certs/dashboard.pem:ro
       - ./config/wazuh/certs/dashboard-key.pem:/etc/wazuh-dashboard/certs/dashboard-key.pem:ro
       - ./config/wazuh/certs/root-ca.pem:/etc/wazuh-dashboard/certs/root-ca.pem:ro
+      - ./config/wazuh/opensearch_dashboards.yml:/usr/share/wazuh-dashboard/config/opensearch_dashboards.yml:ro
     depends_on:
       wazuh-indexer:
         condition: service_healthy
@@ -168,22 +169,23 @@ services:
         condition: service_healthy
 
   greenbone:
-    image: greenbone/community-edition:stable
+    image: immauss/openvas:latest
     hostname: greenbone
     ports:
-      - "9390:9390"
       - "9392:9392"
     volumes:
-      - greenbone-data:/var/lib/gvm
-      - greenbone-vt:/var/lib/openvas
+      - greenbone-data:/data
     environment:
-      GREENBONE_PASSWORD: admin
+      USERNAME: admin
+      PASSWORD: admin
+      RELAYHOST: smtp
+      SMTPPORT: "25"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9392/ || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 10
-      start_period: 120s
+      retries: 20
+      start_period: 300s
 
   generator:
     build: ./generator
@@ -205,6 +207,21 @@ services:
       wazuh-manager:
         condition: service_healthy
 
+  # Cloudflare Tunnel — secure remote access (paid tiers)
+  # To enable: set TUNNEL_TOKEN in .env, then start this service
+  # Setup: cloudflared tunnel login && cloudflared tunnel create kahu
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    restart: unless-stopped
+    depends_on:
+      core:
+        condition: service_started
+    profiles:
+      - cloud
+
 volumes:
   pgdata:
   evidence-store:
@@ -224,5 +241,4 @@ volumes:
   wazuh-indexer-data:
   wazuh-dashboard-config:
   greenbone-data:
-  greenbone-vt:
   wazuh-dashboard-custom:

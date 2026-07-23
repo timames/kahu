@@ -18,6 +18,8 @@ from kahu.schemas.triage import (
     AlertSummary,
     DispositionIn,
     DispositionOut,
+    HistoryAlertSummary,
+    HistoryResponse,
     PipelineBatchRequest,
     PipelineBatchResponse,
     PipelineStatusResponse,
@@ -74,6 +76,65 @@ async def get_triage_queue(
         offset=offset,
         limit=limit,
     )
+
+
+@router.get("/history", response_model=HistoryResponse)
+async def alert_history(
+    severity: str | None = Query(None, pattern="^(critical|high|medium|low|info)$"),
+    verdict: str | None = Query(None),
+    search: str | None = Query(None, max_length=200),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+) -> HistoryResponse:
+    """Browse all historic alerts (dispositioned and pending)."""
+    stmt = select(Alert).outerjoin(AlertDisposition).options(selectinload(Alert.disposition))
+
+    if severity:
+        stmt = stmt.where(Alert.severity == Severity(severity))
+    if verdict:
+        stmt = stmt.where(AlertDisposition.verdict == DispositionVerdict(verdict))
+    if search:
+        pattern = f"%{search}%"
+        stmt = stmt.where(
+            Alert.rule_description.ilike(pattern)
+            | Alert.rule_id.ilike(pattern)
+            | Alert.agent_name.ilike(pattern)
+        )
+
+    stmt = stmt.order_by(Alert.created_at.desc())
+
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = await session.scalar(count_stmt) or 0
+
+    stmt = stmt.offset(offset).limit(limit)
+    result = await session.execute(stmt)
+    alerts = result.scalars().all()
+
+    items = []
+    for a in alerts:
+        llm = a.llm_triage or {}
+        items.append(HistoryAlertSummary(
+            id=a.id,
+            wazuh_alert_id=a.wazuh_alert_id,
+            rule_id=a.rule_id,
+            rule_description=a.rule_description,
+            severity=a.severity.value if isinstance(a.severity, Severity) else a.severity,
+            agent_name=a.agent_name,
+            created_at=a.created_at,
+            verdict=a.disposition.verdict.value if a.disposition else None,
+            analyst=a.disposition.analyst if a.disposition else None,
+            disposition_at=a.disposition.created_at if a.disposition else None,
+            llm_explanation=llm.get("explanation"),
+        ))
+
+    return HistoryResponse(alerts=items, total=total, offset=offset, limit=limit)
+
+
+@router.get("/runbooks")
+async def list_runbooks():
+    """Return simple runbooks for common alert types."""
+    return {"runbooks": RUNBOOKS}
 
 
 @router.get("/alerts/{alert_id}", response_model=AlertDetail)
@@ -264,3 +325,101 @@ def _to_detail(alert: Alert) -> AlertDetail:
         control_tags=alert.control_tags,
         disposition=disposition,
     )
+
+
+# ── Runbooks ──────────────────────────────────────────────
+
+RUNBOOKS = [
+    {
+        "id": "brute-force",
+        "title": "Brute Force / Authentication Failure",
+        "rule_ids": ["5503", "5551", "5710", "5712", "5720", "5763"],
+        "severity": "high",
+        "steps": [
+            "Identify the source IP and target account from the alert details",
+            "Check if the source IP is internal or external (whois / GeoIP lookup)",
+            "Verify with the account owner whether this was legitimate activity",
+            "If malicious: block the source IP at the firewall or WAF",
+            "If the account was compromised: force password reset and revoke active sessions",
+            "Search for lateral movement from the compromised account",
+            "Document the incident and preserve logs as evidence",
+        ],
+    },
+    {
+        "id": "malware-detected",
+        "title": "Malware or Suspicious File Detected",
+        "rule_ids": ["554", "553", "100002"],
+        "severity": "critical",
+        "steps": [
+            "Isolate the affected host from the network immediately",
+            "Identify the file hash (MD5/SHA256) from the alert",
+            "Check the hash against VirusTotal or your threat intel feed",
+            "Determine how the file arrived (email attachment, download, USB, lateral movement)",
+            "Run a full antivirus scan on the isolated host",
+            "Check other hosts for the same file hash or indicators",
+            "If confirmed malware: reimage the host from a known-good baseline",
+            "Preserve forensic evidence before reimaging",
+        ],
+    },
+    {
+        "id": "privilege-escalation",
+        "title": "Privilege Escalation Attempt",
+        "rule_ids": ["5401", "5402", "5501", "5502", "18100", "18101"],
+        "severity": "critical",
+        "steps": [
+            "Identify the user and process involved in the escalation",
+            "Determine if this is an expected administrative action",
+            "Check if the user account has legitimate admin privileges",
+            "Review recent commands run by this user (audit logs)",
+            "If unauthorized: disable the user account immediately",
+            "Check for persistence mechanisms (cron jobs, scheduled tasks, services)",
+            "Scan for rootkits or backdoors on the affected system",
+            "Escalate to incident response team if confirmed",
+        ],
+    },
+    {
+        "id": "file-integrity",
+        "title": "File Integrity Change (FIM)",
+        "rule_ids": ["550", "553", "554"],
+        "severity": "medium",
+        "steps": [
+            "Identify which file was modified and on which host",
+            "Check if this was part of a scheduled change (patch, deployment)",
+            "Compare the file hash against known-good baselines",
+            "Review who made the change (process owner, user account)",
+            "If unexpected: restore the file from backup",
+            "Investigate how the modification occurred",
+            "Update your FIM baseline if this was a legitimate change",
+        ],
+    },
+    {
+        "id": "network-anomaly",
+        "title": "Suspicious Network Activity",
+        "rule_ids": ["1002", "1003", "86601", "86602"],
+        "severity": "high",
+        "steps": [
+            "Identify the source and destination IPs, ports, and protocols",
+            "Check if the destination is a known-bad IP or domain (threat intel)",
+            "Review DNS logs for related domain lookups",
+            "Determine if this is C2 communication, data exfiltration, or scanning",
+            "Block the suspicious destination at the firewall",
+            "Investigate the source host for compromise indicators",
+            "Capture network traffic for forensic analysis if ongoing",
+        ],
+    },
+    {
+        "id": "policy-violation",
+        "title": "Security Policy Violation",
+        "rule_ids": ["510", "512", "515", "516"],
+        "severity": "low",
+        "steps": [
+            "Identify the policy that was violated",
+            "Determine if this is a misconfiguration or intentional bypass",
+            "Contact the responsible team or user for context",
+            "If misconfiguration: remediate and verify the fix",
+            "If intentional bypass: escalate to management",
+            "Update security policies or exceptions as needed",
+            "Log the violation for compliance reporting",
+        ],
+    },
+]

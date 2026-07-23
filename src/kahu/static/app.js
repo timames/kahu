@@ -27,6 +27,7 @@ function navigate(screen) {
   if (screen === 'compliance') loadCompliance();
   if (screen === 'sources') loadSources();
   if (screen === 'vulns') loadVulns();
+  if (screen === 'history') loadHistory();
   if (screen === 'settings') loadSettings();
 }
 
@@ -164,18 +165,23 @@ function renderFeed() {
         ${aiV ? `<span class="ai-badge ${aiV.cls}" title="${confidencePct}% confidence">${aiV.arrow} ${aiV.text}</span>` : ''}
       </div>
       <h3 class="card-title">${escHtml(card.title)}</h3>
-      <p class="card-explanation">${escHtml(card.explanation)}</p>
       <div class="card-meta">
         ${card.agent ? `<span class="card-meta-item">${escHtml(card.agent)}</span>` : ''}
         ${card.source_ip ? `<span class="card-meta-item">${escHtml(card.source_ip)}</span>` : ''}
         <span class="card-meta-item">${timeAgo}</span>
         ${confidencePct > 0 ? `<span class="card-meta-item">${confidencePct}% conf</span>` : ''}
       </div>
-      ${actions.length > 0 ? `
-        <div class="card-actions">
-          <h4>Recommended</h4>
-          <ul>${actions.map(a => `<li>${escHtml(a)}</li>`).join('')}</ul>
-        </div>
+      ${card.explanation ? `
+        <details class="card-details">
+          <summary>Why</summary>
+          <p class="card-explanation">${escHtml(card.explanation)}</p>
+          ${actions.length > 0 ? `<ul class="card-actions-list">${actions.map(a => `<li>${escHtml(a)}</li>`).join('')}</ul>` : ''}
+        </details>
+      ` : actions.length > 0 ? `
+        <details class="card-details">
+          <summary>Actions</summary>
+          <ul class="card-actions-list">${actions.map(a => `<li>${escHtml(a)}</li>`).join('')}</ul>
+        </details>
       ` : ''}
       <div class="card-buttons">
         <button class="card-btn btn-fp" onclick="event.stopPropagation();doSwipe(feedCards.find(c=>c.id==='${card.id}'),'left')">Acknowledge</button>
@@ -1457,16 +1463,29 @@ function renderScans(scans) {
   }
 
   const statusIcons = { Done: '&#x2705;', Running: '&#x23F3;', Requested: '&#x23F3;', New: '&#x2B55;', Stopped: '&#x23F9;' };
-  el.innerHTML = scans.map(s => `
+  el.innerHTML = scans.map(s => {
+    const isRunning = s.status === 'Running' || s.status === 'Requested';
+    const isDone = s.status === 'Done';
+    const isStopped = s.status === 'Stopped' || s.status === 'New';
+    const actions = [];
+    if (isDone) actions.push(`<button class="scan-action-btn" onclick="viewScanResults('${s.id}')">Results</button>`);
+    if (isRunning) actions.push(`<button class="scan-action-btn scan-stop" onclick="stopScan('${s.id}')">Stop</button>`);
+    if (isStopped) actions.push(`<button class="scan-action-btn" onclick="startScan('${s.id}')">Start</button>`);
+    actions.push(`<button class="scan-action-btn scan-delete" onclick="deleteScan('${s.id}')">Delete</button>`);
+    return `
     <div class="scan-card">
       <div class="scan-status-icon">${statusIcons[s.status] || '&#x2B55;'}</div>
       <div class="scan-info">
         <div class="scan-name">${escHtml(s.name || 'Unnamed scan')}</div>
-        <div class="scan-meta">Status: ${escHtml(s.status || 'Unknown')}${s.progress !== undefined ? ' &middot; ' + s.progress + '%' : ''}</div>
+        <div class="scan-meta">
+          ${escHtml(s.status || 'Unknown')}${s.progress && s.progress !== '-1' ? ' &middot; ' + s.progress + '%' : ''}
+          ${s.target_name ? ' &middot; ' + escHtml(s.target_name) : ''}
+          ${s.result_count ? ' &middot; ' + s.result_count + ' results' : ''}
+        </div>
       </div>
-      ${s.status === 'Done' ? `<button class="scan-view-btn" onclick="viewScanResults('${s.id}')">Results</button>` : ''}
-    </div>
-  `).join('');
+      <div class="scan-actions">${actions.join('')}</div>
+    </div>`;
+  }).join('');
 }
 
 async function loadVulnTargets() {
@@ -1510,20 +1529,92 @@ async function viewScanResults(taskId) {
 function switchVulnTab(tab) {
   document.querySelectorAll('.vulns-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.vulns-tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector(`.vulns-tab-content#vulns-tab-${tab}`).classList.add('active');
-  // Find matching tab button
+  document.querySelector(`.vulns-tab-content#vulns-tab-${tab}`)?.classList.add('active');
   document.querySelectorAll('.vulns-tab').forEach(t => {
     if (t.textContent.toLowerCase() === tab || t.textContent.toLowerCase().startsWith(tab)) t.classList.add('active');
   });
+  if (tab === 'reports') loadReports();
 }
 
-function openNewScan() {
+async function stopScan(taskId) {
+  try {
+    await api(`${VULN_API}/scans/${taskId}/stop`, { method: 'POST' });
+    loadVulns();
+  } catch { /* ignore */ }
+}
+
+async function startScan(taskId) {
+  try {
+    await api(`${VULN_API}/scans/${taskId}/start`, { method: 'POST' });
+    loadVulns();
+  } catch { /* ignore */ }
+}
+
+async function deleteScan(taskId) {
+  if (!confirm('Delete this scan and its results?')) return;
+  try {
+    await api(`${VULN_API}/scans/${taskId}`, { method: 'DELETE' });
+    loadVulns();
+  } catch { /* ignore */ }
+}
+
+async function loadReports() {
+  const el = document.getElementById('vulns-reports');
+  try {
+    const data = await api(`${VULN_API}/reports`);
+    const reports = data.reports || [];
+    if (reports.length === 0) {
+      el.innerHTML = `
+        <div class="sources-empty">
+          <div class="sources-empty-icon">&#x1F4C4;</div>
+          <h3>No reports</h3>
+          <p>Reports are generated when scans complete.</p>
+        </div>`;
+      return;
+    }
+    el.innerHTML = reports.map(r => `
+      <div class="scan-card">
+        <div class="scan-status-icon">&#x1F4C4;</div>
+        <div class="scan-info">
+          <div class="scan-name">Report ${escHtml(r.id?.substring(0, 8) || '')}</div>
+          <div class="scan-meta">
+            ${r.scan_start ? escHtml(r.scan_start) : ''}${r.scan_end ? ' &rarr; ' + escHtml(r.scan_end) : ''}
+            ${r.result_count ? ' &middot; ' + r.result_count + ' results' : ''}
+            ${r.severity ? ' &middot; Sev ' + r.severity : ''}
+          </div>
+        </div>
+        ${r.task_id ? `<button class="scan-action-btn" onclick="viewScanResults('${r.task_id}')">View</button>` : ''}
+      </div>
+    `).join('');
+  } catch {
+    el.innerHTML = '<p style="color:var(--text-dim);padding:16px">Could not load reports.</p>';
+  }
+}
+
+async function openNewScan() {
   const modal = document.getElementById('scan-modal');
   document.querySelectorAll('.scan-step').forEach(s => s.classList.remove('active'));
   document.getElementById('scan-step-target').classList.add('active');
   document.getElementById('scan-name').value = '';
   document.getElementById('scan-hosts').value = '';
   modal.classList.add('active');
+
+  // Load scan configs and port lists
+  const configSel = document.getElementById('scan-config');
+  const portSel = document.getElementById('scan-port-list');
+  try {
+    const [configs, portLists] = await Promise.all([
+      api(`${VULN_API}/configs`).catch(() => ({ configs: [] })),
+      api(`${VULN_API}/port-lists`).catch(() => ({ port_lists: [] })),
+    ]);
+    configSel.innerHTML = '<option value="">Default (Full and fast)</option>' +
+      (configs.configs || []).map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+    portSel.innerHTML = '<option value="">Default</option>' +
+      (portLists.port_lists || []).map(p => `<option value="${p.id}">${escHtml(p.name)} (${p.port_count || '?'} ports)</option>`).join('');
+  } catch {
+    configSel.innerHTML = '<option value="">Default</option>';
+    portSel.innerHTML = '<option value="">Default</option>';
+  }
 }
 
 async function submitScan(e) {
@@ -1534,21 +1625,27 @@ async function submitScan(e) {
 
   const name = document.getElementById('scan-name').value.trim();
   const hosts = document.getElementById('scan-hosts').value.trim();
+  const scanConfigId = document.getElementById('scan-config').value;
+  const portListId = document.getElementById('scan-port-list').value;
 
   try {
     // Create target first
+    const targetBody = { name: name + ' target', hosts };
+    if (portListId) targetBody.port_list_id = portListId;
     const target = await api(`${VULN_API}/targets`, {
       method: 'POST',
-      body: JSON.stringify({ name: name + ' target', hosts }),
+      body: JSON.stringify(targetBody),
     });
 
     const targetId = target.id || target.target_id || '';
     if (!targetId) throw new Error('Failed to create target');
 
     // Create and start scan
+    const scanBody = { name, target_id: targetId };
+    if (scanConfigId) scanBody.scan_config_id = scanConfigId;
     const scan = await api(`${VULN_API}/scans`, {
       method: 'POST',
-      body: JSON.stringify({ name, target_id: targetId }),
+      body: JSON.stringify(scanBody),
     });
 
     document.getElementById('scan-result-content').innerHTML = `
@@ -1842,6 +1939,162 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentScreen === 'glance') loadGlance();
   }, 30000);
 });
+
+// ---- Alert History & Runbooks ----
+
+let historyPage = 0;
+let historySearchTimer = null;
+
+async function loadHistory() {
+  const search = document.getElementById('history-search')?.value?.trim() || '';
+  const severity = document.getElementById('history-severity')?.value || '';
+  const verdict = document.getElementById('history-verdict')?.value || '';
+  const limit = 50;
+  const offset = historyPage * limit;
+
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (severity) params.set('severity', severity);
+  if (verdict && verdict !== 'pending') params.set('verdict', verdict);
+  params.set('offset', offset);
+  params.set('limit', limit);
+
+  const el = document.getElementById('history-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const data = await api(`${TRIAGE_API}/history?${params}`);
+    let alerts = data.alerts || [];
+
+    // Client-side filter for "pending" (no disposition)
+    if (verdict === 'pending') {
+      alerts = alerts.filter(a => !a.verdict);
+    }
+
+    if (alerts.length === 0) {
+      el.innerHTML = `
+        <div class="sources-empty">
+          <div class="sources-empty-icon">&#x1F4CB;</div>
+          <h3>No alerts found</h3>
+          <p>${search ? 'Try a different search term.' : 'Alerts will appear here as they are processed.'}</p>
+        </div>`;
+      document.getElementById('history-pager').innerHTML = '';
+      return;
+    }
+
+    const sevColors = { critical: '#ff4444', high: '#ff8c00', medium: '#ffd600', low: '#4fc3f7', info: '#888' };
+    const verdictLabels = {
+      true_positive: 'True Positive',
+      acknowledged: 'Acknowledged',
+      false_positive: 'False Positive',
+      benign_true_positive: 'Benign TP',
+      undetermined: 'Undetermined',
+    };
+
+    el.innerHTML = alerts.map(a => `
+      <div class="history-card" onclick="viewAlertDetail('${a.id}')">
+        <div class="history-sev" style="background:${sevColors[a.severity] || '#888'}">${a.severity[0].toUpperCase()}</div>
+        <div class="history-info">
+          <div class="history-name">${escHtml(a.rule_description)}</div>
+          <div class="history-meta">
+            Rule ${escHtml(a.rule_id)}
+            ${a.agent_name ? ' &middot; ' + escHtml(a.agent_name) : ''}
+            &middot; ${formatTimeAgo(new Date(a.created_at))}
+          </div>
+        </div>
+        <div class="history-verdict ${a.verdict ? 'has-verdict' : 'pending'}">
+          ${a.verdict ? verdictLabels[a.verdict] || a.verdict : 'Pending'}
+        </div>
+      </div>
+    `).join('');
+
+    // Pager
+    const totalPages = Math.ceil(data.total / limit);
+    const pager = document.getElementById('history-pager');
+    if (totalPages > 1) {
+      pager.innerHTML = `
+        <button ${historyPage === 0 ? 'disabled' : ''} onclick="historyPage--;loadHistory()">Prev</button>
+        <span>Page ${historyPage + 1} of ${totalPages} (${data.total} alerts)</span>
+        <button ${historyPage >= totalPages - 1 ? 'disabled' : ''} onclick="historyPage++;loadHistory()">Next</button>
+      `;
+    } else {
+      pager.innerHTML = `<span>${data.total} alert${data.total !== 1 ? 's' : ''}</span>`;
+    }
+  } catch {
+    el.innerHTML = '<p style="color:var(--text-dim);padding:16px">Could not load alert history.</p>';
+  }
+}
+
+function debounceHistorySearch() {
+  clearTimeout(historySearchTimer);
+  historySearchTimer = setTimeout(() => { historyPage = 0; loadHistory(); }, 300);
+}
+
+async function viewAlertDetail(alertId) {
+  try {
+    const alert = await api(`${TRIAGE_API}/alerts/${alertId}`);
+    const sevColors = { critical: '#ff4444', high: '#ff8c00', medium: '#ffd600', low: '#4fc3f7', info: '#888' };
+    const modal = document.getElementById('coach-modal');
+    const content = document.getElementById('coach-content');
+
+    const disp = alert.disposition;
+    const llm = alert.llm_triage || {};
+    const raw = alert.raw_event || {};
+
+    content.innerHTML = `
+      <h3 style="margin:0 0 12px">${escHtml(alert.rule_description)}</h3>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <span class="history-sev" style="background:${sevColors[alert.severity] || '#888'};display:inline-block;padding:2px 8px;border-radius:4px;color:#fff;font-size:12px">${alert.severity.toUpperCase()}</span>
+        <span style="color:var(--text-dim);font-size:12px">Rule ${escHtml(alert.rule_id)}</span>
+        ${alert.agent_name ? `<span style="color:var(--text-dim);font-size:12px">${escHtml(alert.agent_name)}</span>` : ''}
+        <span style="color:var(--text-dim);font-size:12px">${new Date(alert.created_at).toLocaleString()}</span>
+      </div>
+      ${llm.explanation ? `<div style="background:var(--bg-elevated);padding:10px;border-radius:8px;margin-bottom:12px;font-size:13px"><strong>AI Analysis:</strong> ${escHtml(llm.explanation)}</div>` : ''}
+      ${disp ? `<div style="background:var(--bg-elevated);padding:10px;border-radius:8px;margin-bottom:12px;font-size:13px"><strong>Disposition:</strong> ${escHtml(disp.verdict)} by ${escHtml(disp.analyst)}${disp.notes ? ' — ' + escHtml(disp.notes) : ''}</div>` : ''}
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;color:var(--text-dim);font-size:12px">Raw Event</summary>
+        <pre style="background:var(--bg-elevated);padding:10px;border-radius:8px;font-size:11px;overflow-x:auto;margin-top:6px;max-height:300px">${escHtml(JSON.stringify(raw, null, 2))}</pre>
+      </details>
+    `;
+    modal.classList.add('active');
+  } catch {
+    // ignore
+  }
+}
+
+function switchHistoryTab(tab) {
+  document.querySelectorAll('.history-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.history-tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`history-tab-${tab}`)?.classList.add('active');
+  document.querySelectorAll('.history-tab').forEach(t => {
+    if (t.textContent.toLowerCase() === tab || t.textContent.toLowerCase().startsWith(tab)) t.classList.add('active');
+  });
+  if (tab === 'runbooks') loadRunbooks();
+}
+
+async function loadRunbooks() {
+  const el = document.getElementById('runbooks-list');
+  try {
+    const data = await api(`${TRIAGE_API}/runbooks`);
+    const runbooks = data.runbooks || [];
+    const sevColors = { critical: '#ff4444', high: '#ff8c00', medium: '#ffd600', low: '#4fc3f7', info: '#888' };
+
+    el.innerHTML = runbooks.map(rb => `
+      <div class="runbook-card">
+        <div class="runbook-header">
+          <span class="runbook-sev" style="background:${sevColors[rb.severity] || '#888'}">${rb.severity[0].toUpperCase()}</span>
+          <div class="runbook-title">${escHtml(rb.title)}</div>
+          <span class="runbook-rules">Rules: ${rb.rule_ids.join(', ')}</span>
+        </div>
+        <ol class="runbook-steps">
+          ${rb.steps.map(s => `<li>${escHtml(s)}</li>`).join('')}
+        </ol>
+      </div>
+    `).join('');
+  } catch {
+    el.innerHTML = '<p style="color:var(--text-dim);padding:16px">Could not load runbooks.</p>';
+  }
+}
 
 // ---- Service Worker Registration ----
 

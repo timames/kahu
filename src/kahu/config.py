@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     wazuh_indexer_password: str = "changeme"
 
     # Greenbone (Vulnerability Scanner)
-    greenbone_url: str = "http://localhost:9390"
+    greenbone_url: str = "http://localhost:9392"
     greenbone_user: str = "admin"
     greenbone_password: str = "admin"
 

@@ -221,6 +221,7 @@
       <button class="vulns-tab active" onclick="switchVulnTab('findings')">Findings</button>
       <button class="vulns-tab" onclick="switchVulnTab('scans')">Scans</button>
       <button class="vulns-tab" onclick="switchVulnTab('targets')">Targets</button>
+      <button class="vulns-tab" onclick="switchVulnTab('reports')">Reports</button>
     </div>
 
     <div id="vulns-tab-findings" class="vulns-tab-content active">
@@ -235,6 +236,10 @@
 
     <div id="vulns-tab-targets" class="vulns-tab-content">
       <div id="vulns-targets" class="vulns-targets"></div>
+    </div>
+
+    <div id="vulns-tab-reports" class="vulns-tab-content">
+      <div id="vulns-reports" class="vulns-reports"></div>
     </div>
   </div>
 
@@ -255,6 +260,15 @@
             <input id="scan-hosts" type="text" placeholder="192.168.1.0/24, 10.0.0.1" required>
             <span class="src-help">Comma-separated IPs, ranges, or CIDR blocks</span>
           </div>
+          <div class="src-field">
+            <label>Scan Config</label>
+            <select id="scan-config"><option value="">Loading...</option></select>
+            <span class="src-help">Scan depth &mdash; Full and fast is recommended</span>
+          </div>
+          <div class="src-field">
+            <label>Port List</label>
+            <select id="scan-port-list"><option value="">Loading...</option></select>
+          </div>
           <button type="submit" class="src-submit-btn" id="scan-submit-btn">Start Scan</button>
         </form>
       </div>
@@ -263,6 +277,47 @@
         <div id="scan-result-content" class="src-result-content"></div>
         <button class="modal-close" onclick="closeScanModal()">Done</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== HISTORY & RUNBOOKS ===== -->
+  <div id="screen-history" class="screen">
+    <div class="history-header">
+      <h2>Alert History</h2>
+      <div class="history-tabs">
+        <button class="history-tab active" onclick="switchHistoryTab('alerts')">Alerts</button>
+        <button class="history-tab" onclick="switchHistoryTab('runbooks')">Runbooks</button>
+      </div>
+    </div>
+
+    <div id="history-tab-alerts" class="history-tab-content active">
+      <div class="history-filters">
+        <input id="history-search" type="text" placeholder="Search alerts..." oninput="debounceHistorySearch()">
+        <select id="history-severity" onchange="loadHistory()">
+          <option value="">All severities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="info">Info</option>
+        </select>
+        <select id="history-verdict" onchange="loadHistory()">
+          <option value="">All status</option>
+          <option value="true_positive">True Positive</option>
+          <option value="acknowledged">Acknowledged</option>
+          <option value="benign_true_positive">Benign TP</option>
+          <option value="undetermined">Undetermined</option>
+          <option value="pending">Pending</option>
+        </select>
+      </div>
+      <div id="history-list" class="history-list">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+      <div id="history-pager" class="history-pager"></div>
+    </div>
+
+    <div id="history-tab-runbooks" class="history-tab-content">
+      <div id="runbooks-list" class="runbooks-list"></div>
     </div>
   </div>
 
@@ -393,6 +448,10 @@
     <button data-screen="sources" onclick="navigate('sources')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       <span>Sources</span>
+    </button>
+    <button data-screen="history" onclick="navigate('history')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+      <span>History</span>
     </button>
   </nav>
 

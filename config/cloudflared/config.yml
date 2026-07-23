@@ -1,0 +1,23 @@
+# Cloudflare Tunnel config for Kahu appliance
+# Setup: cloudflared tunnel login && cloudflared tunnel create kahu
+# Then set TUNNEL_TOKEN in .env or run: cloudflared tunnel run kahu
+
+tunnel: TUNNEL_ID_HERE
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # Kahu web UI + API
+  - hostname: "*.kahu.security"
+    service: http://core:8000
+    originRequest:
+      noTLSVerify: false
+      connectTimeout: 30s
+
+  # Wazuh dashboard (admin only, separate Access policy)
+  - hostname: "wazuh.*.kahu.security"
+    service: https://wazuh-dashboard:5601
+    originRequest:
+      noTLSVerify: true
+
+  # Catch-all (required by cloudflared)
+  - service: http_status:404
