@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kahu-v1';
+const CACHE_NAME = 'kahu-v4';
 const SHELL_FILES = [
   '/',
   '/static/styles.css',
@@ -48,8 +48,12 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Shell files: cache first, then network
+  // Shell files: network first, fall back to cache
   e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request))
+    fetch(e.request).then((resp) => {
+      const clone = resp.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+      return resp;
+    }).catch(() => caches.match(e.request))
   );
 });

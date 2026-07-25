@@ -242,6 +242,21 @@ nav .badge {
   color: var(--text-dim);
 }
 
+.batch-ack-btn {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.batch-ack-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .card-stack {
   position: relative;
   flex: 1;
@@ -2831,4 +2846,278 @@ nav .badge {
     padding-left: 0;
     padding-right: 0;
   }
+}
+
+/* ===== RECON ===== */
+
+.recon-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px 8px;
+}
+.recon-header h2 { font-size: 20px; color: var(--text-bright); }
+
+.recon-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.recon-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+.recon-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.recon-tab-content { display: none; padding: 0 20px 100px; }
+.recon-tab-content.active { display: block; }
+
+.recon-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.recon-checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.recon-checkboxes input[type=checkbox] {
+  accent-color: var(--accent);
+}
+
+.recon-results { margin-top: 16px; }
+
+.recon-domain-header {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-bright);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
+.recon-record-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recon-record-group {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.recon-type-badge {
+  display: inline-block;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.recon-records {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recon-record {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.recon-record-value {
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--text-bright);
+  word-break: break-all;
+}
+
+.recon-record-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.recon-errors {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recon-error {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--sev-medium);
+}
+
+.recon-scan-summary {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+/* IP Scan */
+.recon-host-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recon-host-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.recon-host-card.dead {
+  opacity: 0.5;
+  padding: 6px 12px;
+}
+
+.recon-host-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.recon-host-card.alive .recon-host-status { background: var(--green, #4caf50); }
+.recon-host-card.dead .recon-host-status { background: var(--text-dim); }
+
+.recon-host-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recon-host-ip {
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--text-bright);
+}
+
+.recon-host-name {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recon-host-latency {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.recon-scan-port-btn {
+  background: var(--bg-elevated, var(--border));
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.recon-dead-hosts {
+  margin-top: 8px;
+}
+.recon-dead-hosts summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 6px 0;
+}
+
+/* Port Scan */
+.recon-port-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recon-port-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+
+.recon-port-card.closed {
+  opacity: 0.5;
+  padding: 6px 12px;
+}
+
+.recon-port-num {
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-bright);
+  min-width: 50px;
+}
+
+.recon-port-state {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  min-width: 55px;
+  text-align: center;
+}
+.recon-port-card.open .recon-port-state {
+  background: var(--green, #4caf50);
+  color: #fff;
+}
+.recon-port-card.closed .recon-port-state {
+  background: var(--border);
+  color: var(--text-dim);
+}
+
+.recon-port-service {
+  font-size: 12px;
+  color: var(--text-dim);
+  flex: 1;
 }

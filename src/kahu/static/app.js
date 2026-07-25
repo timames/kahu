@@ -6,6 +6,7 @@ const INVEST_API = '/api/investigation';
 const CONN_API = '/api/connectors';
 const COMP_API = '/api/compliance';
 const VULN_API = '/api/vulns';
+const RECON_API = '/api/recon';
 let currentScreen = 'glance';
 let feedCards = [];
 let feedRemaining = 0;
@@ -28,6 +29,7 @@ function navigate(screen) {
   if (screen === 'sources') loadSources();
   if (screen === 'vulns') loadVulns();
   if (screen === 'history') loadHistory();
+  if (screen === 'recon') loadRecon();
   if (screen === 'settings') loadSettings();
 }
 
@@ -100,12 +102,48 @@ async function loadGlance() {
 // ---- Feed Screen ----
 
 async function loadFeed() {
-  const data = await api(`${API}/feed?limit=20`);
+  const data = await api(`${API}/feed?limit=50`);
   if (data._offline) return;
 
   feedCards = data.cards;
   feedRemaining = data.remaining;
+
+  // Show/hide batch ack button
+  const batchBtn = document.getElementById('batch-ack-btn');
+  if (batchBtn) batchBtn.style.display = feedCards.length > 0 ? '' : 'none';
+
   renderFeed();
+}
+
+async function batchAcknowledge() {
+  const total = feedCards.length + feedRemaining;
+  if (!confirm(`Acknowledge all ${total} pending alerts?`)) return;
+
+  const btn = document.getElementById('batch-ack-btn');
+  btn.disabled = true;
+  btn.textContent = 'Working...';
+
+  try {
+    const result = await api(`${API}/feed/batch-acknowledge`, {
+      method: 'POST',
+      body: JSON.stringify({ analyst: getAnalystName() }),
+    });
+
+    showXpToast(result.xp_earned, `${result.acknowledged} alerts acknowledged`);
+    feedCards = [];
+    feedRemaining = 0;
+    btn.style.display = 'none';
+    renderFeed();
+
+    // Refresh glance badge
+    const feedBadge = document.getElementById('feed-badge');
+    if (feedBadge) feedBadge.style.display = 'none';
+  } catch (err) {
+    alert('Batch acknowledge failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ack All';
+  }
 }
 
 function renderFeed() {
@@ -1939,6 +1977,271 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentScreen === 'glance') loadGlance();
   }, 30000);
 });
+
+// ---- Recon Screen ----
+
+function loadRecon() {
+  // Nothing to preload — form-driven
+}
+
+function switchReconTab(tab) {
+  document.querySelectorAll('.recon-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.recon-tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`recon-tab-${tab}`)?.classList.add('active');
+  document.querySelectorAll('.recon-tab').forEach(t => {
+    if (t.textContent.toLowerCase().includes(tab === 'dns' ? 'dns lookup' : 'reverse')) t.classList.add('active');
+  });
+}
+
+async function submitDnsLookup(e) {
+  e.preventDefault();
+  const domain = document.getElementById('dns-domain').value.trim();
+  if (!domain) return false;
+
+  const checkboxes = document.querySelectorAll('#dns-record-types input[type=checkbox]:checked');
+  const types = Array.from(checkboxes).map(cb => cb.value);
+
+  const btn = document.getElementById('dns-submit-btn');
+  const results = document.getElementById('dns-results');
+  btn.disabled = true;
+  btn.textContent = 'Resolving...';
+  results.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const data = await api(`${RECON_API}/dns`, {
+      method: 'POST',
+      body: JSON.stringify({ domain, record_types: types }),
+    });
+
+    if (data._offline) {
+      results.innerHTML = '<p style="color:var(--text-dim);padding:16px">Offline — cannot perform DNS lookup.</p>';
+      return false;
+    }
+
+    let html = `<div class="recon-domain-header">${escHtml(data.domain)}</div>`;
+
+    if (data.records && data.records.length > 0) {
+      // Group by type
+      const grouped = {};
+      data.records.forEach(r => {
+        if (!grouped[r.type]) grouped[r.type] = [];
+        grouped[r.type].push(r);
+      });
+
+      html += '<div class="recon-record-groups">';
+      for (const [type, recs] of Object.entries(grouped)) {
+        html += `<div class="recon-record-group">
+          <div class="recon-type-badge">${escHtml(type)}</div>
+          <div class="recon-records">`;
+        for (const r of recs) {
+          html += `<div class="recon-record">
+            <span class="recon-record-value">${escHtml(r.value)}</span>
+            <span class="recon-record-meta">TTL ${r.ttl}${r.priority != null ? ' &middot; Priority ' + r.priority : ''}</span>
+          </div>`;
+        }
+        html += '</div></div>';
+      }
+      html += '</div>';
+    } else {
+      html += '<p style="color:var(--text-dim);padding:8px 0">No records found.</p>';
+    }
+
+    if (data.errors && Object.keys(data.errors).length > 0) {
+      html += '<div class="recon-errors">';
+      for (const [type, msg] of Object.entries(data.errors)) {
+        html += `<div class="recon-error"><strong>${escHtml(type)}:</strong> ${escHtml(msg)}</div>`;
+      }
+      html += '</div>';
+    }
+
+    results.innerHTML = html;
+  } catch (err) {
+    results.innerHTML = `<p style="color:#ff4444;padding:16px">${escHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Lookup';
+  }
+  return false;
+}
+
+async function submitReverseLookup(e) {
+  e.preventDefault();
+  const ip = document.getElementById('reverse-ip').value.trim();
+  if (!ip) return false;
+
+  const btn = document.getElementById('reverse-submit-btn');
+  const results = document.getElementById('reverse-results');
+  btn.disabled = true;
+  btn.textContent = 'Resolving...';
+  results.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const data = await api(`${RECON_API}/dns/reverse`, {
+      method: 'POST',
+      body: JSON.stringify({ ip }),
+    });
+
+    if (data._offline) {
+      results.innerHTML = '<p style="color:var(--text-dim);padding:16px">Offline — cannot perform reverse lookup.</p>';
+      return false;
+    }
+
+    let html = `<div class="recon-domain-header">${escHtml(data.ip)}</div>`;
+    if (data.hostnames && data.hostnames.length > 0) {
+      html += '<div class="recon-record-groups"><div class="recon-record-group">';
+      html += '<div class="recon-type-badge">PTR</div><div class="recon-records">';
+      data.hostnames.forEach(h => {
+        html += `<div class="recon-record"><span class="recon-record-value">${escHtml(h)}</span></div>`;
+      });
+      html += '</div></div></div>';
+    } else {
+      html += '<p style="color:var(--text-dim);padding:8px 0">No reverse DNS records found for this IP.</p>';
+    }
+
+    results.innerHTML = html;
+  } catch (err) {
+    results.innerHTML = `<p style="color:#ff4444;padding:16px">${escHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Reverse Lookup';
+  }
+  return false;
+}
+
+async function submitIpScan(e) {
+  e.preventDefault();
+  const target = document.getElementById('ipscan-target').value.trim();
+  if (!target) return false;
+
+  const timeout_ms = parseInt(document.getElementById('ipscan-timeout').value) || 1000;
+  const btn = document.getElementById('ipscan-submit-btn');
+  const results = document.getElementById('ipscan-results');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  results.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const data = await api(`${RECON_API}/ip-scan`, {
+      method: 'POST',
+      body: JSON.stringify({ target, timeout_ms }),
+    });
+
+    if (data._offline) {
+      results.innerHTML = '<p style="color:var(--text-dim);padding:16px">Offline.</p>';
+      return false;
+    }
+
+    let html = `<div class="recon-domain-header">${escHtml(data.target)}</div>`;
+    html += `<div class="recon-scan-summary">${data.alive_count} alive / ${data.total_scanned} scanned</div>`;
+
+    if (data.hosts && data.hosts.length > 0) {
+      html += '<div class="recon-host-list">';
+      for (const h of data.hosts) {
+        if (!h.alive) continue;
+        html += `<div class="recon-host-card alive">
+          <div class="recon-host-status"></div>
+          <div class="recon-host-info">
+            <span class="recon-host-ip">${escHtml(h.ip)}</span>
+            ${h.hostname ? `<span class="recon-host-name">${escHtml(h.hostname)}</span>` : ''}
+          </div>
+          ${h.latency_ms != null ? `<span class="recon-host-latency">${h.latency_ms}ms</span>` : ''}
+          <button class="recon-scan-port-btn" onclick="quickPortScan('${escHtml(h.ip)}')">Ports</button>
+        </div>`;
+      }
+      // Show dead hosts collapsed
+      const dead = data.hosts.filter(h => !h.alive);
+      if (dead.length > 0) {
+        html += `<details class="recon-dead-hosts"><summary>${dead.length} host${dead.length !== 1 ? 's' : ''} not responding</summary>`;
+        for (const h of dead) {
+          html += `<div class="recon-host-card dead"><div class="recon-host-status"></div><span class="recon-host-ip">${escHtml(h.ip)}</span></div>`;
+        }
+        html += '</details>';
+      }
+      html += '</div>';
+    } else {
+      html += '<p style="color:var(--text-dim);padding:8px 0">No hosts responded.</p>';
+    }
+
+    results.innerHTML = html;
+  } catch (err) {
+    results.innerHTML = `<p style="color:#ff4444;padding:16px">${escHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan';
+  }
+  return false;
+}
+
+function quickPortScan(ip) {
+  switchReconTab('portscan');
+  document.getElementById('portscan-target').value = ip;
+}
+
+async function submitPortScan(e) {
+  e.preventDefault();
+  const target = document.getElementById('portscan-target').value.trim();
+  if (!target) return false;
+
+  const ports = document.getElementById('portscan-ports').value.trim() || 'common';
+  const timeout_ms = parseInt(document.getElementById('portscan-timeout').value) || 1500;
+  const btn = document.getElementById('portscan-submit-btn');
+  const results = document.getElementById('portscan-results');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  results.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const data = await api(`${RECON_API}/port-scan`, {
+      method: 'POST',
+      body: JSON.stringify({ target, ports, timeout_ms }),
+    });
+
+    if (data._offline) {
+      results.innerHTML = '<p style="color:var(--text-dim);padding:16px">Offline.</p>';
+      return false;
+    }
+
+    let html = `<div class="recon-domain-header">${escHtml(data.target)}</div>`;
+    html += `<div class="recon-scan-summary">${data.open_count} open / ${data.total_scanned} scanned</div>`;
+
+    const openPorts = data.ports.filter(p => p.state === 'open');
+    const closedPorts = data.ports.filter(p => p.state === 'closed');
+
+    if (openPorts.length > 0) {
+      html += '<div class="recon-port-list">';
+      for (const p of openPorts) {
+        html += `<div class="recon-port-card open">
+          <span class="recon-port-num">${p.port}</span>
+          <span class="recon-port-state">OPEN</span>
+          <span class="recon-port-service">${escHtml(p.service)}</span>
+        </div>`;
+      }
+      html += '</div>';
+    } else {
+      html += '<p style="color:var(--text-dim);padding:8px 0">No open ports found.</p>';
+    }
+
+    if (closedPorts.length > 0) {
+      html += `<details class="recon-dead-hosts"><summary>${closedPorts.length} closed port${closedPorts.length !== 1 ? 's' : ''}</summary><div class="recon-port-list">`;
+      for (const p of closedPorts) {
+        html += `<div class="recon-port-card closed">
+          <span class="recon-port-num">${p.port}</span>
+          <span class="recon-port-state">CLOSED</span>
+          <span class="recon-port-service">${escHtml(p.service)}</span>
+        </div>`;
+      }
+      html += '</div></details>';
+    }
+
+    results.innerHTML = html;
+  } catch (err) {
+    results.innerHTML = `<p style="color:#ff4444;padding:16px">${escHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan Ports';
+  }
+  return false;
+}
 
 // ---- Alert History & Runbooks ----
 

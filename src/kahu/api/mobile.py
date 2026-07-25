@@ -292,6 +292,49 @@ async def swipe(
     )
 
 
+class BatchAckRequest(BaseModel):
+    analyst: str = Field(default="mobile-user", min_length=1, max_length=255)
+
+
+class BatchAckResponse(BaseModel):
+    acknowledged: int
+    xp_earned: int
+
+
+@router.post("/feed/batch-acknowledge", response_model=BatchAckResponse)
+async def batch_acknowledge(
+    body: BatchAckRequest,
+    session: AsyncSession = Depends(get_session),
+) -> BatchAckResponse:
+    """Acknowledge all pending alerts in one action."""
+    stmt = (
+        select(Alert)
+        .outerjoin(AlertDisposition)
+        .where(AlertDisposition.id.is_(None))
+    )
+    result = await session.execute(stmt)
+    alerts = result.scalars().all()
+
+    count = 0
+    for alert in alerts:
+        await record_disposition(
+            alert_id=alert.id,
+            verdict=DispositionVerdict.ACKNOWLEDGED,
+            analyst=body.analyst,
+            notes="Batch acknowledge from feed",
+            session=session,
+        )
+        count += 1
+
+    # Award 1 XP per alert
+    if count > 0:
+        xp = XpEvent(analyst=body.analyst, points=count, reason="batch_acknowledge")
+        session.add(xp)
+        await session.commit()
+
+    return BatchAckResponse(acknowledged=count, xp_earned=count)
+
+
 # ---------------------------------------------------------------------------
 # Score — gamification
 # ---------------------------------------------------------------------------

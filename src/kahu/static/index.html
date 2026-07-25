@@ -30,6 +30,7 @@
     <div class="feed-header">
       <h2>Feed</h2>
       <span id="feed-remaining" class="feed-remaining"></span>
+      <button id="batch-ack-btn" class="batch-ack-btn" onclick="batchAcknowledge()" style="display:none">Ack All</button>
     </div>
     <div id="card-stack" class="card-stack">
       <div class="loading"><div class="spinner"></div></div>
@@ -280,6 +281,90 @@
     </div>
   </div>
 
+  <!-- ===== RECON ===== -->
+  <div id="screen-recon" class="screen">
+    <div class="recon-header">
+      <h2>Recon</h2>
+    </div>
+
+    <div class="recon-tabs">
+      <button class="recon-tab active" onclick="switchReconTab('dns')">DNS</button>
+      <button class="recon-tab" onclick="switchReconTab('reverse')">Reverse DNS</button>
+      <button class="recon-tab" onclick="switchReconTab('ipscan')">IP Scan</button>
+      <button class="recon-tab" onclick="switchReconTab('portscan')">Port Scan</button>
+    </div>
+
+    <div id="recon-tab-dns" class="recon-tab-content active">
+      <form id="dns-form" onsubmit="return submitDnsLookup(event)">
+        <div class="src-field">
+          <label>Domain <span class="required">*</span></label>
+          <input id="dns-domain" type="text" placeholder="e.g. example.com" required autocomplete="off">
+        </div>
+        <div class="src-field">
+          <label>Record Types</label>
+          <div class="recon-checkboxes" id="dns-record-types">
+            <label><input type="checkbox" value="A" checked> A</label>
+            <label><input type="checkbox" value="AAAA" checked> AAAA</label>
+            <label><input type="checkbox" value="MX" checked> MX</label>
+            <label><input type="checkbox" value="NS" checked> NS</label>
+            <label><input type="checkbox" value="TXT" checked> TXT</label>
+            <label><input type="checkbox" value="CNAME" checked> CNAME</label>
+            <label><input type="checkbox" value="SOA" checked> SOA</label>
+          </div>
+        </div>
+        <button type="submit" class="src-submit-btn" id="dns-submit-btn">Lookup</button>
+      </form>
+      <div id="dns-results" class="recon-results"></div>
+    </div>
+
+    <div id="recon-tab-reverse" class="recon-tab-content">
+      <form id="reverse-dns-form" onsubmit="return submitReverseLookup(event)">
+        <div class="src-field">
+          <label>IP Address <span class="required">*</span></label>
+          <input id="reverse-ip" type="text" placeholder="e.g. 8.8.8.8" required autocomplete="off">
+        </div>
+        <button type="submit" class="src-submit-btn" id="reverse-submit-btn">Reverse Lookup</button>
+      </form>
+      <div id="reverse-results" class="recon-results"></div>
+    </div>
+
+    <div id="recon-tab-ipscan" class="recon-tab-content">
+      <form id="ipscan-form" onsubmit="return submitIpScan(event)">
+        <div class="src-field">
+          <label>Target <span class="required">*</span></label>
+          <input id="ipscan-target" type="text" placeholder="e.g. 192.168.1.0/24 or 10.0.0.1-50" required autocomplete="off">
+          <span class="src-help">IP address, CIDR block, or range. Max /24 (256 hosts).</span>
+        </div>
+        <div class="src-field">
+          <label>Timeout (ms)</label>
+          <input id="ipscan-timeout" type="number" value="1000" min="100" max="5000" step="100">
+        </div>
+        <button type="submit" class="src-submit-btn" id="ipscan-submit-btn">Scan</button>
+      </form>
+      <div id="ipscan-results" class="recon-results"></div>
+    </div>
+
+    <div id="recon-tab-portscan" class="recon-tab-content">
+      <form id="portscan-form" onsubmit="return submitPortScan(event)">
+        <div class="src-field">
+          <label>Target <span class="required">*</span></label>
+          <input id="portscan-target" type="text" placeholder="e.g. 192.168.1.1 or example.com" required autocomplete="off">
+        </div>
+        <div class="src-field">
+          <label>Ports</label>
+          <input id="portscan-ports" type="text" placeholder="common" value="common" autocomplete="off">
+          <span class="src-help">"common" (top 27), "all" (1-1024), or custom: 22,80,443 or 1-100</span>
+        </div>
+        <div class="src-field">
+          <label>Timeout (ms)</label>
+          <input id="portscan-timeout" type="number" value="1500" min="100" max="10000" step="100">
+        </div>
+        <button type="submit" class="src-submit-btn" id="portscan-submit-btn">Scan Ports</button>
+      </form>
+      <div id="portscan-results" class="recon-results"></div>
+    </div>
+  </div>
+
   <!-- ===== HISTORY & RUNBOOKS ===== -->
   <div id="screen-history" class="screen">
     <div class="history-header">
@@ -448,6 +533,10 @@
     <button data-screen="sources" onclick="navigate('sources')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       <span>Sources</span>
+    </button>
+    <button data-screen="recon" onclick="navigate('recon')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Recon</span>
     </button>
     <button data-screen="history" onclick="navigate('history')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
