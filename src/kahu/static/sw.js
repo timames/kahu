@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kahu-v4';
+const CACHE_NAME = 'kahu-v5';
 const SHELL_FILES = [
   '/',
   '/static/styles.css',

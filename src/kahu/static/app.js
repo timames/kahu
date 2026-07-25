@@ -7,6 +7,7 @@ const CONN_API = '/api/connectors';
 const COMP_API = '/api/compliance';
 const VULN_API = '/api/vulns';
 const RECON_API = '/api/recon';
+const ARSENAL_API = '/api/arsenal';
 let currentScreen = 'glance';
 let feedCards = [];
 let feedRemaining = 0;
@@ -552,6 +553,9 @@ function addChatMsg(text, role) {
 
 async function loadSettings() {
   const el = document.getElementById('screen-settings');
+
+  // Check arsenal mode
+  checkArsenalMode();
 
   // Restore tolerance slider
   const saved = localStorage.getItem('kahu_tolerance') || '2';
@@ -1981,16 +1985,23 @@ document.addEventListener('DOMContentLoaded', () => {
 // ---- Recon Screen ----
 
 function loadRecon() {
-  // Nothing to preload — form-driven
+  checkArsenalMode();
 }
 
 function switchReconTab(tab) {
   document.querySelectorAll('.recon-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.recon-tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById(`recon-tab-${tab}`)?.classList.add('active');
+  // Activate the correct tab button
   document.querySelectorAll('.recon-tab').forEach(t => {
-    if (t.textContent.toLowerCase().includes(tab === 'dns' ? 'dns lookup' : 'reverse')) t.classList.add('active');
+    const text = t.textContent.toLowerCase().trim();
+    if (tab === 'dns' && text === 'dns') t.classList.add('active');
+    else if (tab === 'reverse' && text === 'reverse dns') t.classList.add('active');
+    else if (tab === 'ipscan' && text === 'ip scan') t.classList.add('active');
+    else if (tab === 'portscan' && text === 'port scan') t.classList.add('active');
+    else if (tab === 'arsenal' && text === 'arsenal') t.classList.add('active');
   });
+  if (tab === 'arsenal') loadArsenalTools();
 }
 
 async function submitDnsLookup(e) {
@@ -2239,6 +2250,142 @@ async function submitPortScan(e) {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Scan Ports';
+  }
+  return false;
+}
+
+// ---- Arsenal / Unlocked Mode ----
+
+async function checkArsenalMode() {
+  try {
+    const data = await api(`${ARSENAL_API}/status`);
+    if (data._offline) return;
+    updateModeUI(data.mode === 'unlocked');
+  } catch { /* ignore */ }
+}
+
+function updateModeUI(unlocked) {
+  const btn = document.getElementById('mode-toggle-btn');
+  const arsenalTab = document.getElementById('arsenal-tab-btn');
+  if (btn) {
+    btn.textContent = unlocked ? 'Unlocked' : 'Guardian';
+    btn.className = 'mode-toggle-btn ' + (unlocked ? 'unlocked' : 'guardian');
+  }
+  if (arsenalTab) arsenalTab.style.display = unlocked ? '' : 'none';
+
+  // Update arsenal tab content
+  const lockedMsg = document.getElementById('arsenal-locked-msg');
+  const content = document.getElementById('arsenal-content');
+  if (lockedMsg) lockedMsg.style.display = unlocked ? 'none' : '';
+  if (content) content.style.display = unlocked ? '' : 'none';
+}
+
+async function toggleArsenalMode() {
+  const btn = document.getElementById('mode-toggle-btn');
+  const isUnlocked = btn.classList.contains('unlocked');
+
+  if (!isUnlocked) {
+    if (!confirm('Switch to UNLOCKED mode?\n\nThis enables offensive security tools (port scanning, exploit planning, password attacks).\n\nOnly use this for authorized penetration testing.')) return;
+  }
+
+  try {
+    const endpoint = isUnlocked ? 'lock' : 'unlock';
+    const data = await api(`${ARSENAL_API}/${endpoint}`, {
+      method: 'POST',
+      body: JSON.stringify({ analyst: getAnalystName() }),
+    });
+    updateModeUI(data.mode === 'unlocked');
+    if (data.mode === 'unlocked') loadArsenalTools();
+  } catch (err) {
+    alert('Failed to toggle mode: ' + err.message);
+  }
+}
+
+async function loadArsenalTools() {
+  const category = document.getElementById('arsenal-category-filter')?.value || '';
+  try {
+    const data = await api(`${ARSENAL_API}/tools${category ? '?category=' + category : ''}`);
+    if (data._offline) return;
+
+    // Populate category filter (once)
+    const filter = document.getElementById('arsenal-category-filter');
+    if (filter && filter.options.length <= 1 && data.categories) {
+      for (const [id, name] of Object.entries(data.categories)) {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = name;
+        filter.appendChild(opt);
+      }
+    }
+
+    const list = document.getElementById('arsenal-tools-list');
+    if (!data.tools || data.tools.length === 0) {
+      list.innerHTML = '<p style="color:var(--text-dim)">No tools in this category.</p>';
+      return;
+    }
+
+    list.innerHTML = data.tools.map(t => `
+      <div class="arsenal-tool-card" onclick="this.querySelector('.arsenal-tool-detail').classList.toggle('open')">
+        <div class="arsenal-tool-header">
+          <span class="arsenal-tool-name">${escHtml(t.name)}</span>
+          <span class="arsenal-tool-cat">${escHtml(t.category)}</span>
+        </div>
+        <div class="arsenal-tool-desc">${escHtml(t.description)}</div>
+        <div class="arsenal-tool-detail">
+          <div class="arsenal-tool-examples">
+            ${t.examples.map(ex => `<code>${escHtml(ex)}</code>`).join('')}
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch { /* locked or offline */ }
+}
+
+async function submitAttackPlan(e) {
+  e.preventDefault();
+  const target = document.getElementById('arsenal-target').value.trim();
+  const objective = document.getElementById('arsenal-objective').value.trim();
+  const phase = document.getElementById('arsenal-phase').value;
+  const scope = document.getElementById('arsenal-scope').value;
+  const credentials = document.getElementById('arsenal-creds')?.value.trim() || '';
+  const constraints = document.getElementById('arsenal-constraints').value.trim();
+
+  if (!target || !objective) return false;
+
+  const btn = document.getElementById('arsenal-plan-btn');
+  const results = document.getElementById('arsenal-plan-results');
+  btn.disabled = true;
+  btn.textContent = 'Planning...';
+  results.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const data = await api(`${ARSENAL_API}/plan`, {
+      method: 'POST',
+      body: JSON.stringify({ target, objective, phase, scope, credentials, constraints }),
+    });
+
+    const phaseLabel = phase === 'both' ? 'Full Pentest' : phase === 'authenticated' ? 'Authenticated' : 'Unauthenticated';
+    let html = `<div class="recon-domain-header">Attack Plan: ${escHtml(target)} <span class="arsenal-phase-badge">${phaseLabel}</span></div>`;
+
+    if (data.degraded) {
+      html += '<div class="recon-error">AI engine offline — showing limited results.</div>';
+    }
+
+    if (data.tools_referenced && data.tools_referenced.length > 0) {
+      html += '<div class="arsenal-tools-used">';
+      data.tools_referenced.forEach(t => {
+        html += `<span class="arsenal-tool-badge">${escHtml(t)}</span>`;
+      });
+      html += '</div>';
+    }
+
+    html += `<div class="arsenal-plan-text">${escHtml(data.plan).replace(/\n/g, '<br>')}</div>`;
+    results.innerHTML = html;
+  } catch (err) {
+    results.innerHTML = `<p style="color:#ff4444;padding:16px">${escHtml(err.message)}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Attack Plan';
   }
   return false;
 }

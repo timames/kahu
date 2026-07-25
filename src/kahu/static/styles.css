@@ -3121,3 +3121,174 @@ nav .badge {
   color: var(--text-dim);
   flex: 1;
 }
+
+/* ===== ARSENAL / UNLOCKED MODE ===== */
+
+.mode-toggle-btn {
+  border: none;
+  padding: 4px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: all 0.3s;
+}
+.mode-toggle-btn.guardian {
+  background: var(--accent);
+  color: var(--bg);
+}
+.mode-toggle-btn.unlocked {
+  background: #ff4444;
+  color: #fff;
+  animation: pulse-red 2s infinite;
+}
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,68,68,0.4); }
+  50% { box-shadow: 0 0 8px 2px rgba(255,68,68,0.3); }
+}
+
+.arsenal-tab {
+  color: #ff4444 !important;
+}
+.arsenal-tab.active {
+  border-bottom-color: #ff4444 !important;
+}
+
+.arsenal-locked {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-dim);
+}
+
+.arsenal-tools-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 20px 0 10px;
+}
+.arsenal-tools-header h3 {
+  font-size: 15px;
+  color: var(--text-bright);
+  margin: 0;
+}
+.arsenal-tools-header select {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.arsenal-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.arsenal-tool-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.arsenal-tool-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.arsenal-tool-name {
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ff4444;
+}
+
+.arsenal-tool-cat {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.arsenal-tool-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.arsenal-tool-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s;
+}
+.arsenal-tool-detail.open {
+  max-height: 300px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.arsenal-tool-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.arsenal-tool-examples code {
+  display: block;
+  font-size: 11px;
+  color: var(--text-bright);
+  background: var(--bg);
+  padding: 4px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+.arsenal-tools-used {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.arsenal-tool-badge {
+  background: #ff4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.arsenal-plan-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.arsenal-phase-badge {
+  font-size: 11px;
+  background: #ff2222;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.src-field .hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: normal;
+}

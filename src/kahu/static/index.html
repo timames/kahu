@@ -292,6 +292,7 @@
       <button class="recon-tab" onclick="switchReconTab('reverse')">Reverse DNS</button>
       <button class="recon-tab" onclick="switchReconTab('ipscan')">IP Scan</button>
       <button class="recon-tab" onclick="switchReconTab('portscan')">Port Scan</button>
+      <button class="recon-tab arsenal-tab" id="arsenal-tab-btn" onclick="switchReconTab('arsenal')" style="display:none">Arsenal</button>
     </div>
 
     <div id="recon-tab-dns" class="recon-tab-content active">
@@ -362,6 +363,60 @@
         <button type="submit" class="src-submit-btn" id="portscan-submit-btn">Scan Ports</button>
       </form>
       <div id="portscan-results" class="recon-results"></div>
+    </div>
+
+    <div id="recon-tab-arsenal" class="recon-tab-content">
+      <div id="arsenal-locked-msg" class="arsenal-locked" style="display:none">
+        <p>Arsenal is locked. Enable <strong>Unlocked Mode</strong> in Settings to access offensive tools.</p>
+      </div>
+      <div id="arsenal-content" style="display:none">
+        <form id="arsenal-plan-form" onsubmit="return submitAttackPlan(event)">
+          <div class="src-field">
+            <label>Target <span class="required">*</span></label>
+            <input id="arsenal-target" type="text" placeholder="e.g. 192.168.86.102 or target.local" required autocomplete="off">
+          </div>
+          <div class="src-field">
+            <label>Objective <span class="required">*</span></label>
+            <input id="arsenal-objective" type="text" placeholder="e.g. Full pentest of internal AD environment" required autocomplete="off">
+          </div>
+          <div class="src-field">
+            <label>Phase</label>
+            <select id="arsenal-phase">
+              <option value="both">Full Pentest (Unauth + Auth)</option>
+              <option value="unauthenticated">Unauthenticated Only</option>
+              <option value="authenticated">Authenticated / Post-Compromise</option>
+            </select>
+          </div>
+          <div class="src-field">
+            <label>Scope</label>
+            <select id="arsenal-scope">
+              <option value="full">Full Assessment</option>
+              <option value="external">External Only</option>
+              <option value="internal">Internal Network</option>
+              <option value="web">Web Application</option>
+              <option value="wireless">Wireless</option>
+            </select>
+          </div>
+          <div class="src-field">
+            <label>Credentials <span class="hint">(for authenticated phase)</span></label>
+            <input id="arsenal-creds" type="text" placeholder="e.g. domain\user:P@ssw0rd or user:pass" autocomplete="off">
+          </div>
+          <div class="src-field">
+            <label>Constraints</label>
+            <input id="arsenal-constraints" type="text" placeholder="e.g. no DoS, stealth only, business hours" autocomplete="off">
+          </div>
+          <button type="submit" class="src-submit-btn" id="arsenal-plan-btn">Generate Attack Plan</button>
+        </form>
+
+        <div class="arsenal-tools-header">
+          <h3>Tool Catalog</h3>
+          <select id="arsenal-category-filter" onchange="loadArsenalTools()">
+            <option value="">All Categories</option>
+          </select>
+        </div>
+        <div id="arsenal-tools-list" class="arsenal-tools-list"></div>
+        <div id="arsenal-plan-results" class="recon-results"></div>
+      </div>
     </div>
   </div>
 
@@ -492,9 +547,11 @@
         <span class="settings-item-label">Version</span>
         <span class="settings-item-value"><span>0.2.0</span></span>
       </div>
-      <div class="settings-item">
-        <span class="settings-item-label">Kahu Core</span>
-        <span class="settings-item-value"><span>Guardian mode</span></span>
+      <div class="settings-item" id="mode-toggle-row">
+        <span class="settings-item-label">Mode</span>
+        <span class="settings-item-value">
+          <button id="mode-toggle-btn" class="mode-toggle-btn guardian" onclick="toggleArsenalMode()">Guardian</button>
+        </span>
       </div>
     </div>
   </div>
