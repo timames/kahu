@@ -1,8 +1,11 @@
 services:
   core:
     build: .
-    network_mode: host
+    ports:
+      - "8000:8000"
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
