@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+
+  /* Scrollbar styling for dark theme */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e2a45;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2d3f66;
+  }
+}
+
+@layer components {
+  .severity-chip {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide;
+  }
+  .severity-critical { @apply bg-sev-critical/20 text-sev-critical; }
+  .severity-high { @apply bg-sev-high/20 text-sev-high; }
+  .severity-medium { @apply bg-sev-medium/20 text-sev-medium; }
+  .severity-low { @apply bg-sev-low/20 text-sev-low; }
+  .severity-info { @apply bg-sev-info/20 text-sev-info; }
+}
