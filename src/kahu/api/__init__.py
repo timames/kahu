@@ -10,6 +10,7 @@ from kahu.api.connectors import router as connectors_router
 from kahu.api.vulnerabilities import router as vulns_router
 from kahu.api.recon import router as recon_router
 from kahu.api.arsenal import router as arsenal_router
+from kahu.api.reports import router as reports_router
 
 router = APIRouter()
 router.include_router(health_router, tags=["health"])
@@ -17,6 +18,7 @@ router.include_router(briefing_router, tags=["briefing"])
 router.include_router(triage_router, prefix="/triage", tags=["triage"])
 router.include_router(investigation_router, prefix="/investigation", tags=["investigation"])
 router.include_router(compliance_router, prefix="/compliance", tags=["compliance"])
+router.include_router(reports_router, prefix="/reports", tags=["reports"])
 router.include_router(mobile_router, prefix="/m", tags=["mobile"])
 router.include_router(connectors_router, prefix="/connectors", tags=["connectors"])
 router.include_router(vulns_router, prefix="/vulns", tags=["vulnerabilities"])
