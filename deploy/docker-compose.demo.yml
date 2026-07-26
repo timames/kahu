@@ -1,0 +1,612 @@
+# Kahu Demo Stack — 64 GB server
+# Usage: docker compose -f docker-compose.demo.yml up -d
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ════════════════════════════════════════════
+  # GREENBONE / OpenVAS  (~8 GB total)
+  # ════════════════════════════════════════════
+  greenbone-redis:
+    image: redis:7-alpine
+    <<: *restart
+    command: redis-server --save "" --appendonly no --maxmemory 512mb
+    volumes:
+      - greenbone-redis:/data
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  greenbone-pg-gvm:
+    image: greenbone/pg-gvm:stable
+    <<: *restart
+    volumes:
+      - greenbone-pgdata:/var/lib/postgresql
+    shm_size: 256m
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  greenbone-vulnerability-manager:
+    image: greenbone/gvmd:stable
+    <<: *restart
+    volumes:
+      - greenbone-gvmd:/var/lib/gvm
+      - greenbone-scap:/var/lib/gvm/scap-data
+      - greenbone-cert:/var/lib/gvm/cert-data
+      - greenbone-osp:/run/ospd
+    depends_on:
+      greenbone-pg-gvm:
+        condition: service_started
+      greenbone-redis:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+
+  greenbone-ospd-openvas:
+    image: greenbone/ospd-openvas:stable
+    <<: *restart
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - greenbone-osp:/run/ospd
+      - greenbone-openvas:/var/lib/openvas
+      - greenbone-notus:/var/lib/notus
+    depends_on:
+      greenbone-redis:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  greenbone-notus-scanner:
+    image: greenbone/notus-scanner:stable
+    <<: *restart
+    volumes:
+      - greenbone-notus:/var/lib/notus
+    depends_on:
+      greenbone-redis:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  greenbone-gsa:
+    image: greenbone/gsa:stable
+    <<: *restart
+    ports:
+      - "9392:80"
+    depends_on:
+      - greenbone-vulnerability-manager
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  # ════════════════════════════════════════════
+  # WAZUH  (~11 GB total: 8 indexer + 3 mgr/dash)
+  # ════════════════════════════════════════════
+
+  # One-shot init: copies certs into a shared volume with correct ownership
+  wazuh-certs-init:
+    image: alpine:3.20
+    volumes:
+      - ./config/wazuh/certs:/src-certs:ro
+      - wazuh-indexer-certs:/usr/share/wazuh-indexer/certs
+    command: >-
+      sh -c "cp /src-certs/indexer.pem /src-certs/indexer-key.pem
+             /src-certs/root-ca.pem /src-certs/admin.pem /src-certs/admin-key.pem
+             /usr/share/wazuh-indexer/certs/ &&
+             chown -R 1000:1000 /usr/share/wazuh-indexer/certs &&
+             chmod 600 /usr/share/wazuh-indexer/certs/*-key.pem &&
+             chmod 644 /usr/share/wazuh-indexer/certs/*.pem &&
+             echo Certs ready"
+
+  wazuh-indexer:
+    image: wazuh/wazuh-indexer:4.14.1
+    hostname: wazuh-indexer
+    <<: *restart
+    ports:
+      - "9200:9200"
+    environment:
+      OPENSEARCH_JAVA_OPTS: "-Xms4g -Xmx4g"
+      bootstrap.memory_lock: "true"
+      discovery.type: single-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - wazuh-indexer-data:/var/lib/wazuh-indexer
+      - wazuh-indexer-certs:/usr/share/wazuh-indexer/certs:ro
+      - ./config/wazuh/opensearch.yml:/usr/share/wazuh-indexer/opensearch.yml:ro
+    depends_on:
+      wazuh-certs-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sku admin:admin https://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.14.1
+    hostname: wazuh-manager
+    <<: *restart
+    ports:
+      - "1514:1514"
+      - "1515:1515"
+      - "55000:55000"
+    environment:
+      INDEXER_URL: https://wazuh-indexer:9200
+      INDEXER_USERNAME: admin
+      INDEXER_PASSWORD: "${WAZUH_INDEXER_PASSWORD:-admin}"
+      FILEBEAT_SSL_VERIFICATION_MODE: none
+      SSL_CERTIFICATE_AUTHORITIES: /etc/ssl/root-ca.pem
+      SSL_CERTIFICATE: /etc/ssl/filebeat.pem
+      SSL_KEY: /etc/ssl/filebeat-key.pem
+      API_USERNAME: wazuh-wui
+      API_PASSWORD: "${WAZUH_API_PASSWORD:-Kahu@Wazuh2026!}"
+    volumes:
+      - wazuh-api-config:/var/ossec/api/configuration
+      - wazuh-etc:/var/ossec/etc
+      - wazuh-logs:/var/ossec/logs
+      - wazuh-queue:/var/ossec/queue
+      - wazuh-var-multigroups:/var/ossec/var/multigroups
+      - wazuh-integrations:/var/ossec/integrations
+      - wazuh-active-response:/var/ossec/active-response/bin
+      - wazuh-agentless:/var/ossec/agentless
+      - wazuh-wodles:/var/ossec/wodles
+      - filebeat-etc:/etc/filebeat
+      - filebeat-var:/var/lib/filebeat
+      - ./config/wazuh/certs/root-ca.pem:/etc/ssl/root-ca.pem:ro
+      - ./config/wazuh/certs/filebeat.pem:/etc/ssl/filebeat.pem:ro
+      - ./config/wazuh/certs/filebeat-key.pem:/etc/ssl/filebeat-key.pem:ro
+    depends_on:
+      wazuh-indexer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk https://localhost:55000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  wazuh-dashboard:
+    image: wazuh/wazuh-dashboard:4.14.1
+    hostname: wazuh-dashboard
+    <<: *restart
+    ports:
+      - "443:5601"
+    environment:
+      INDEXER_USERNAME: admin
+      INDEXER_PASSWORD: "${WAZUH_INDEXER_PASSWORD:-admin}"
+      WAZUH_API_URL: https://wazuh-manager
+      DASHBOARD_USERNAME: kibanaserver
+      DASHBOARD_PASSWORD: kibanaserver
+      API_USERNAME: wazuh-wui
+      API_PASSWORD: "${WAZUH_API_PASSWORD:-Kahu@Wazuh2026!}"
+      SERVER_SSL_ENABLED: "true"
+      SERVER_SSL_CERTIFICATE: /usr/share/wazuh-dashboard/certs/dashboard.pem
+      SERVER_SSL_KEY: /usr/share/wazuh-dashboard/certs/dashboard-key.pem
+      OPENSEARCH_SSL_CERTIFICATEAUTHORITIES: /usr/share/wazuh-dashboard/certs/root-ca.pem
+    volumes:
+      - wazuh-dashboard-config:/usr/share/wazuh-dashboard/data/wazuh/config
+      - wazuh-dashboard-custom:/usr/share/wazuh-dashboard/plugins/wazuh/public/assets/custom
+      - ./config/wazuh/certs/dashboard.pem:/usr/share/wazuh-dashboard/certs/dashboard.pem:ro
+      - ./config/wazuh/certs/dashboard-key.pem:/usr/share/wazuh-dashboard/certs/dashboard-key.pem:ro
+      - ./config/wazuh/certs/root-ca.pem:/usr/share/wazuh-dashboard/certs/root-ca.pem:ro
+      - ./config/wazuh/certs/dashboard.pem:/etc/wazuh-dashboard/certs/dashboard.pem:ro
+      - ./config/wazuh/certs/dashboard-key.pem:/etc/wazuh-dashboard/certs/dashboard-key.pem:ro
+      - ./config/wazuh/certs/root-ca.pem:/etc/wazuh-dashboard/certs/root-ca.pem:ro
+      - ./config/wazuh/opensearch_dashboards.yml:/usr/share/wazuh-dashboard/config/opensearch_dashboards.yml:ro
+    depends_on:
+      wazuh-indexer:
+        condition: service_healthy
+      wazuh-manager:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  # ════════════════════════════════════════════
+  # MISP  (~6 GB total)
+  # ════════════════════════════════════════════
+  misp-db:
+    image: mariadb:11
+    <<: *restart
+    environment:
+      MYSQL_DATABASE: misp
+      MYSQL_USER: misp
+      MYSQL_PASSWORD: "${MISP_DB_PASSWORD:-changeme}"
+      MYSQL_ROOT_PASSWORD: "${MISP_ROOT_PASSWORD:-changeme}"
+    command: --innodb-buffer-pool-size=2G --character-set-server=utf8mb4
+    volumes:
+      - misp-db:/var/lib/mysql
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+
+  misp-redis:
+    image: redis:7-alpine
+    <<: *restart
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  misp:
+    image: ghcr.io/misp/misp-docker/misp-core:latest
+    <<: *restart
+    ports:
+      - "8443:443"
+    environment:
+      MYSQL_HOST: misp-db
+      MYSQL_DATABASE: misp
+      MYSQL_USER: misp
+      MYSQL_PASSWORD: "${MISP_DB_PASSWORD:-changeme}"
+      REDIS_HOST: misp-redis
+      MISP_BASEURL: "${MISP_BASEURL:-https://localhost:8443}"
+    volumes:
+      - misp-data:/var/www/MISP
+    depends_on:
+      - misp-db
+      - misp-redis
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+
+  # ════════════════════════════════════════════
+  # SHUFFLE  (~3 GB total)
+  # ════════════════════════════════════════════
+  shuffle-opensearch:
+    image: opensearchproject/opensearch:2.18.0
+    <<: *restart
+    environment:
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+    volumes:
+      - shuffle-os-data:/usr/share/opensearch/data
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  shuffle-backend:
+    image: ghcr.io/shuffle/shuffle-backend:latest
+    <<: *restart
+    ports:
+      - "5001:5001"
+    environment:
+      SHUFFLE_OPENSEARCH_URL: http://shuffle-opensearch:9200
+      SHUFFLE_DEFAULT_USERNAME: admin
+      SHUFFLE_DEFAULT_PASSWORD: "${SHUFFLE_PASSWORD:-changeme}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - shuffle-opensearch
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  shuffle-frontend:
+    image: ghcr.io/shuffle/shuffle-frontend:latest
+    <<: *restart
+    ports:
+      - "3443:80"
+    environment:
+      BACKEND_HOSTNAME: shuffle-backend
+    depends_on:
+      - shuffle-backend
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  shuffle-orborus:
+    image: ghcr.io/shuffle/shuffle-orborus:latest
+    <<: *restart
+    environment:
+      SHUFFLE_WORKER_VERSION: latest
+      BASE_URL: http://shuffle-backend:5001
+      DOCKER_API_VERSION: "1.40"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - shuffle-backend
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ════════════════════════════════════════════
+  # DFIR-IRIS  (~4 GB total)
+  # ════════════════════════════════════════════
+  iris-db:
+    image: postgres:16-alpine
+    <<: *restart
+    environment:
+      POSTGRES_USER: iris
+      POSTGRES_PASSWORD: "${IRIS_DB_PASSWORD:-changeme}"
+      POSTGRES_DB: iris
+    volumes:
+      - iris-pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  iris-rabbitmq:
+    image: rabbitmq:3-alpine
+    <<: *restart
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  iris-web:
+    image: ghcr.io/dfir-iris/iriswebapp:latest
+    <<: *restart
+    ports:
+      - "8444:443"
+    environment:
+      POSTGRES_SERVER: iris-db
+      POSTGRES_DB: iris
+      POSTGRES_USER: iris
+      POSTGRES_PASSWORD: "${IRIS_DB_PASSWORD:-changeme}"
+      IRIS_SECRET_KEY: "${IRIS_SECRET:-changeme-generate-a-real-key}"
+      CELERY_BROKER: amqp://guest:guest@iris-rabbitmq:5672
+    depends_on:
+      - iris-db
+      - iris-rabbitmq
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  iris-worker:
+    image: ghcr.io/dfir-iris/iriswebapp:latest
+    <<: *restart
+    command: ["celery", "-A", "app.celery", "worker", "--loglevel=info"]
+    environment:
+      POSTGRES_SERVER: iris-db
+      POSTGRES_DB: iris
+      POSTGRES_USER: iris
+      POSTGRES_PASSWORD: "${IRIS_DB_PASSWORD:-changeme}"
+      IRIS_SECRET_KEY: "${IRIS_SECRET:-changeme-generate-a-real-key}"
+      CELERY_BROKER: amqp://guest:guest@iris-rabbitmq:5672
+    depends_on:
+      - iris-db
+      - iris-rabbitmq
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ════════════════════════════════════════════
+  # NETBOX  (~2 GB)
+  # ════════════════════════════════════════════
+  netbox-db:
+    image: postgres:16-alpine
+    <<: *restart
+    environment:
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: "${NETBOX_DB_PASSWORD:-changeme}"
+      POSTGRES_DB: netbox
+    volumes:
+      - netbox-pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  netbox-redis:
+    image: redis:7-alpine
+    <<: *restart
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  netbox:
+    image: netboxcommunity/netbox:latest
+    <<: *restart
+    ports:
+      - "8001:8080"
+    environment:
+      DB_HOST: netbox-db
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: "${NETBOX_DB_PASSWORD:-changeme}"
+      REDIS_HOST: netbox-redis
+      SECRET_KEY: "${NETBOX_SECRET:-changeme-generate-a-real-key}"
+      SUPERUSER_NAME: admin
+      SUPERUSER_PASSWORD: "${NETBOX_ADMIN_PASSWORD:-changeme}"
+      SUPERUSER_EMAIL: admin@example.com
+    depends_on:
+      - netbox-db
+      - netbox-redis
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  # ════════════════════════════════════════════
+  # CISO ASSISTANT  (~2 GB)
+  # ════════════════════════════════════════════
+  ciso-assistant-db:
+    image: postgres:16-alpine
+    <<: *restart
+    environment:
+      POSTGRES_USER: ciso
+      POSTGRES_PASSWORD: "${CISO_DB_PASSWORD:-changeme}"
+      POSTGRES_DB: ciso_assistant
+    volumes:
+      - ciso-pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  ciso-assistant:
+    image: ghcr.io/intuitem/ciso-assistant-community:latest
+    <<: *restart
+    ports:
+      - "8002:8000"
+    environment:
+      DJANGO_DB_HOST: ciso-assistant-db
+      DJANGO_DB_NAME: ciso_assistant
+      DJANGO_DB_USER: ciso
+      DJANGO_DB_PASSWORD: "${CISO_DB_PASSWORD:-changeme}"
+      DJANGO_SECRET_KEY: "${CISO_SECRET:-changeme-generate-a-real-key}"
+    depends_on:
+      - ciso-assistant-db
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  # ════════════════════════════════════════════
+  # KEYCLOAK  (~1 GB)
+  # ════════════════════════════════════════════
+  keycloak-db:
+    image: postgres:16-alpine
+    <<: *restart
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: "${KEYCLOAK_DB_PASSWORD:-changeme}"
+      POSTGRES_DB: keycloak
+    volumes:
+      - keycloak-pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    <<: *restart
+    command: start-dev
+    ports:
+      - "8080:8080"
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: keycloak-db
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: "${KEYCLOAK_DB_PASSWORD:-changeme}"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-changeme}"
+    depends_on:
+      - keycloak-db
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  # ════════════════════════════════════════════
+  # VAULT  (~512 MB)
+  # ════════════════════════════════════════════
+  vault:
+    image: hashicorp/vault:1.17
+    <<: *restart
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "${VAULT_DEV_TOKEN:-kahu-dev-token}"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    volumes:
+      - vault-data:/vault/file
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ════════════════════════════════════════════
+  # GRAFANA  (~512 MB)
+  # ════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana-oss:latest
+    <<: *restart
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:-changeme}"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+volumes:
+  # Greenbone
+  greenbone-redis:
+  greenbone-pgdata:
+  greenbone-gvmd:
+  greenbone-scap:
+  greenbone-cert:
+  greenbone-osp:
+  greenbone-openvas:
+  greenbone-notus:
+  # Wazuh
+  wazuh-indexer-data:
+  wazuh-indexer-certs:
+  wazuh-api-config:
+  wazuh-etc:
+  wazuh-logs:
+  wazuh-queue:
+  wazuh-var-multigroups:
+  wazuh-integrations:
+  wazuh-active-response:
+  wazuh-agentless:
+  wazuh-wodles:
+  filebeat-etc:
+  filebeat-var:
+  wazuh-dashboard-config:
+  wazuh-dashboard-custom:
+  # MISP
+  misp-db:
+  misp-data:
+  # Shuffle
+  shuffle-os-data:
+  # DFIR-IRIS
+  iris-pgdata:
+  # NetBox
+  netbox-pgdata:
+  # CISO Assistant
+  ciso-pgdata:
+  # Keycloak
+  keycloak-pgdata:
+  # Vault
+  vault-data:
+  # Grafana
+  grafana-data:
