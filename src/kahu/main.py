@@ -52,3 +52,23 @@ async def service_worker():
         media_type="application/javascript",
         headers={"Service-Worker-Allowed": "/"},
     )
+
+
+@app.get("/registerSW.js")
+async def register_sw():
+    return FileResponse(STATIC_DIR / "registerSW.js", media_type="application/javascript")
+
+
+@app.get("/manifest.webmanifest")
+async def manifest():
+    return FileResponse(STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    """Catch-all: serve index.html for client-side routes (React Router)."""
+    # Serve actual static files if they exist
+    static_file = STATIC_DIR / full_path
+    if static_file.is_file():
+        return FileResponse(static_file)
+    return FileResponse(STATIC_DIR / "index.html")

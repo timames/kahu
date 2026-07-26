@@ -549,9 +549,27 @@ async def evidence_summary(
         .limit(1)
     )
 
+    # Verify hash-chain integrity by walking records in order
+    chain_intact = True
+    broken_at = None
+    if total > 0:
+        chain_stmt = (
+            select(EvidenceRecord.record_hash, EvidenceRecord.previous_hash)
+            .order_by(EvidenceRecord.timestamp)
+        )
+        chain_result = await session.execute(chain_stmt)
+        prev_hash = None
+        for record_hash, previous_hash in chain_result.all():
+            if prev_hash is not None and previous_hash != prev_hash:
+                chain_intact = False
+                broken_at = record_hash
+                break
+            prev_hash = record_hash
+
     return {
         "total_records": total,
         "by_type": by_type,
         "latest_timestamp": latest.isoformat() if latest else None,
-        "chain_intact": True,  # TODO: full chain verification
+        "chain_intact": chain_intact,
+        **({"broken_at": broken_at} if broken_at else {}),
     }
