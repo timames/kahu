@@ -1,5 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from kahu.api.deps import get_current_user
+from kahu.api.auth import router as auth_router
 from kahu.api.health import router as health_router
 from kahu.api.triage import router as triage_router
 from kahu.api.investigation import router as investigation_router
@@ -13,14 +15,20 @@ from kahu.api.arsenal import router as arsenal_router
 from kahu.api.reports import router as reports_router
 
 router = APIRouter()
+
+# Public routes — no auth required
 router.include_router(health_router, tags=["health"])
-router.include_router(briefing_router, tags=["briefing"])
-router.include_router(triage_router, prefix="/triage", tags=["triage"])
-router.include_router(investigation_router, prefix="/investigation", tags=["investigation"])
-router.include_router(compliance_router, prefix="/compliance", tags=["compliance"])
-router.include_router(reports_router, prefix="/reports", tags=["reports"])
-router.include_router(mobile_router, prefix="/m", tags=["mobile"])
-router.include_router(connectors_router, prefix="/connectors", tags=["connectors"])
-router.include_router(vulns_router, prefix="/vulns", tags=["vulnerabilities"])
-router.include_router(recon_router, prefix="/recon", tags=["recon"])
-router.include_router(arsenal_router, prefix="/arsenal", tags=["arsenal"])
+router.include_router(auth_router, prefix="/auth", tags=["auth"])
+
+# Protected routes — require valid JWT
+_auth = [Depends(get_current_user)]
+router.include_router(briefing_router, tags=["briefing"], dependencies=_auth)
+router.include_router(triage_router, prefix="/triage", tags=["triage"], dependencies=_auth)
+router.include_router(investigation_router, prefix="/investigation", tags=["investigation"], dependencies=_auth)
+router.include_router(compliance_router, prefix="/compliance", tags=["compliance"], dependencies=_auth)
+router.include_router(reports_router, prefix="/reports", tags=["reports"], dependencies=_auth)
+router.include_router(mobile_router, prefix="/m", tags=["mobile"], dependencies=_auth)
+router.include_router(connectors_router, prefix="/connectors", tags=["connectors"], dependencies=_auth)
+router.include_router(vulns_router, prefix="/vulns", tags=["vulnerabilities"], dependencies=_auth)
+router.include_router(recon_router, prefix="/recon", tags=["recon"], dependencies=_auth)
+router.include_router(arsenal_router, prefix="/arsenal", tags=["arsenal"], dependencies=_auth)

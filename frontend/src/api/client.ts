@@ -1,16 +1,54 @@
 const BASE = "/api";
 
+function getToken(): string | null {
+  try {
+    const raw = localStorage.getItem("kahu_auth");
+    if (raw) return JSON.parse(raw).token;
+  } catch { /* ignore */ }
+  return null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
-    ...init,
-  });
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string>),
+  };
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE}${path}`, { ...init, headers });
+
+  if (res.status === 401) {
+    // Token expired or invalid — clear auth and redirect to login
+    localStorage.removeItem("kahu_auth");
+    window.location.href = "/login";
+    throw new Error("Session expired");
+  }
+
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw new Error(`${res.status}: ${text}`);
   }
   return res.json() as Promise<T>;
 }
+
+// ── Auth ──
+export const checkSetupRequired = () =>
+  request<{ setup_required: boolean }>("/auth/setup-required");
+
+export const login = (username: string, password: string) =>
+  request<TokenResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+
+export const setup = (username: string, email: string, password: string) =>
+  request<TokenResponse>("/auth/setup", {
+    method: "POST",
+    body: JSON.stringify({ username, email, password }),
+  });
+
+export const getMe = () => request<UserInfo>("/auth/me");
 
 // ── Health ──
 export const getHealth = () => request<{ status: string }>("/health");
@@ -86,6 +124,22 @@ export const getScore = () => request<ScoreData>("/m/score");
 export const getTickets = () => request<{ tickets: Ticket[] }>("/m/tickets");
 
 // ── Types ──
+export interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  username: string;
+  role: string;
+}
+
+export interface UserInfo {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+}
+
 export interface Alert {
   id: string;
   severity: string;

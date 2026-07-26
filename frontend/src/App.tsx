@@ -1,5 +1,6 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
+import { Login } from "@/pages/Login";
 import { Glance } from "@/pages/Glance";
 import { Feed } from "@/pages/Feed";
 import { Investigate } from "@/pages/Investigate";
@@ -11,11 +12,25 @@ import { Arsenal } from "@/pages/Arsenal";
 import { Score } from "@/pages/Score";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { More } from "@/pages/More";
+import { useAuth } from "@/hooks/useAuth";
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
 
 export function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
+      <Route path="/login" element={<Login />} />
+      <Route
+        element={
+          <RequireAuth>
+            <Layout />
+          </RequireAuth>
+        }
+      >
         <Route index element={<Glance />} />
         <Route path="feed" element={<Feed />} />
         <Route path="investigate" element={<Investigate />} />

@@ -10,8 +10,10 @@ import {
   Swords,
   Trophy,
   Settings,
+  LogOut,
 } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
+import { useAuth } from "@/hooks/useAuth";
 
 interface NavItem {
   to: string;
@@ -35,6 +37,7 @@ const SETTINGS_ITEM: NavItem = { to: "/settings", icon: Settings, label: "Settin
 
 export function Layout() {
   const { gamificationEnabled } = useSettings();
+  const { username, logout } = useAuth();
 
   const items = [...NAV_ITEMS];
   if (gamificationEnabled) items.push(GAMIFICATION_ITEM);
@@ -68,6 +71,12 @@ export function Layout() {
               {item.label}
             </NavLink>
           ))}
+        </div>
+        <div className="border-t border-kahu-border px-5 py-3 flex items-center justify-between">
+          <span className="text-xs text-slate-500 truncate">{username}</span>
+          <button onClick={logout} className="text-slate-500 hover:text-white transition-colors" title="Sign out">
+            <LogOut size={16} />
+          </button>
         </div>
       </nav>
 
