@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from kahu.config import settings
 from kahu.api import router as api_router
 from kahu.db import engine
+from kahu.services.pono import run_pono_loop
 from kahu.services.triage.poller import run_poller
 from kahu.services.triage.reeval import start_reeval_loop, stop_reeval_loop
 
@@ -18,12 +19,19 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    # Startup — launch the Wazuh alert poller and re-eval loop
+    # Auto-create tables for SQLite dev mode
+    if settings.database_url.startswith("sqlite"):
+        from kahu.db import create_tables
+        await create_tables()
+
+    # Startup — launch background tasks
     poller_task = asyncio.create_task(run_poller(interval=15.0))
+    pono_task = asyncio.create_task(run_pono_loop(interval=300.0))
     await start_reeval_loop()
     yield
     # Shutdown
     poller_task.cancel()
+    pono_task.cancel()
     await stop_reeval_loop()
     await engine.dispose()
 

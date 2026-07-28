@@ -12,7 +12,9 @@ from kahu.api.connectors import router as connectors_router
 from kahu.api.vulnerabilities import router as vulns_router
 from kahu.api.recon import router as recon_router
 from kahu.api.arsenal import router as arsenal_router
+from kahu.api.pono import router as pono_router
 from kahu.api.reports import router as reports_router
+from kahu.api.validation import router as validation_router
 
 router = APIRouter()
 
@@ -32,3 +34,5 @@ router.include_router(connectors_router, prefix="/connectors", tags=["connectors
 router.include_router(vulns_router, prefix="/vulns", tags=["vulnerabilities"], dependencies=_auth)
 router.include_router(recon_router, prefix="/recon", tags=["recon"], dependencies=_auth)
 router.include_router(arsenal_router, prefix="/arsenal", tags=["arsenal"], dependencies=_auth)
+router.include_router(pono_router, prefix="/pono", tags=["pono"], dependencies=_auth)
+router.include_router(validation_router, prefix="/validation", tags=["validation"], dependencies=_auth)
