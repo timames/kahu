@@ -13,9 +13,10 @@ from sqlalchemy import String, desc, func as sa_func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.db import get_session
-from kahu.models.alerts import Alert
 from kahu.models.compliance import ComplianceProfile
 from kahu.models.evidence import EvidenceRecord
+from kahu.services.compliance.engine import analyze_gaps, compute_coverage
+from kahu.services.compliance.evidence import verify_chain
 
 router = APIRouter()
 
@@ -227,23 +228,6 @@ FRAMEWORKS = {
     },
 }
 
-# What Kahu capabilities map to which tags
-KAHU_EVIDENCE_MAP = {
-    "audit_logging": "Kahu continuously collects and indexes security events from all connected sources",
-    "monitoring": "Real-time monitoring via Wazuh SIEM with AI-assisted triage",
-    "siem": "Wazuh SIEM/XDR integration with local AI correlation",
-    "incident_response": "Automated alert triage pipeline with human-in-the-loop disposition",
-    "triage": "AI-powered alert triage with severity classification and recommended actions",
-    "evidence": "Append-only, hash-chained evidence store with full attribution",
-    "correlation": "LLM-driven cross-alert correlation and pattern detection",
-    "network_monitoring": "Network flow collection and firewall log analysis",
-    "anomaly_detection": "AI-based anomaly detection on aggregated event data",
-    "continuous_monitoring": "24/7 automated monitoring with degraded-mode fallback",
-    "access_control": "Monitoring of authentication events and access patterns",
-    "authentication": "Collection and analysis of authentication logs",
-    "privilege_escalation": "Detection of privilege escalation attempts",
-}
-
 
 # ---------------------------------------------------------------------------
 # Schemas
@@ -262,6 +246,8 @@ class ControlCoverage(BaseModel):
     coverage_source: str | None = None
     evidence_type: str | None = None
     gap: bool = False
+    evidence_count: int = 0
+    stale: bool = False
 
 
 class FamilyCoverage(BaseModel):
@@ -314,73 +300,80 @@ async def get_coverage(
     framework_id: str,
     session: AsyncSession = Depends(get_session),
 ) -> CoverageMatrix:
-    """Get coverage matrix based on real alert evidence and active connectors."""
+    """Get coverage matrix with evidence freshness and gap indicators."""
     if framework_id not in FRAMEWORKS:
         raise HTTPException(status_code=404, detail="Framework not found")
 
-    framework = FRAMEWORKS[framework_id]
-
-    # Gather evidence tags from real alerts
-    result = await session.execute(
-        select(Alert.control_tags).where(Alert.control_tags.isnot(None))
-    )
-    alert_tags = set()
-    for row in result.scalars().all():
-        if row:
-            alert_tags.update(row)
-
-    all_evidence_tags = alert_tags
+    report = await compute_coverage(framework_id, FRAMEWORKS[framework_id], session)
 
     families = []
-    total_controls = 0
-    covered_controls = 0
-
-    for fam_id, fam in framework["families"].items():
-        controls = []
-        for ctrl in fam["controls"]:
-            total_controls += 1
-            # A control is covered if Kahu has the capability AND we have evidence
-            has_capability = any(tag in KAHU_EVIDENCE_MAP for tag in ctrl["tags"])
-            has_evidence = any(tag in all_evidence_tags for tag in ctrl["tags"])
-
-            if has_capability and has_evidence:
-                covered_controls += 1
-                source = "Kahu automated — evidence collected"
-                evidence_type = "automated"
-            elif has_capability:
-                covered_controls += 1
-                source = "Kahu capability — awaiting evidence"
-                evidence_type = "capability"
-            else:
-                source = None
-                evidence_type = None
-
-            covered = has_capability
-            controls.append(ControlCoverage(
-                id=ctrl["id"],
-                title=ctrl["title"],
-                covered=covered,
-                coverage_source=source,
-                evidence_type=evidence_type,
-                gap=not covered,
-            ))
-
-        fam_covered = sum(1 for c in controls if c.covered)
+    for fam in report.families:
+        controls = [
+            ControlCoverage(
+                id=c.control_id,
+                title=c.title,
+                covered=c.covered,
+                coverage_source=c.coverage_source,
+                evidence_type=c.evidence_type,
+                gap=c.gap,
+                evidence_count=c.evidence_count,
+                stale=c.stale,
+            )
+            for c in fam.controls
+        ]
         families.append(FamilyCoverage(
-            family_id=fam_id,
-            family_name=fam["name"],
+            family_id=fam.family_id,
+            family_name=fam.family_name,
             controls=controls,
-            coverage_pct=round(fam_covered / len(controls) * 100, 1) if controls else 0,
+            coverage_pct=fam.coverage_pct,
         ))
 
     return CoverageMatrix(
-        framework_id=framework_id,
-        framework_name=framework["name"],
-        total_controls=total_controls,
-        covered_controls=covered_controls,
-        coverage_pct=round(covered_controls / total_controls * 100, 1) if total_controls else 0,
+        framework_id=report.framework_id,
+        framework_name=report.framework_name,
+        total_controls=report.total_controls,
+        covered_controls=report.covered_controls,
+        coverage_pct=report.coverage_pct,
         families=families,
     )
+
+
+@router.get("/frameworks/{framework_id}/gaps")
+async def get_gaps(
+    framework_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Gap analysis — uncovered controls with prioritised recommendations."""
+    if framework_id not in FRAMEWORKS:
+        raise HTTPException(status_code=404, detail="Framework not found")
+
+    analysis = await analyze_gaps(framework_id, FRAMEWORKS[framework_id], session)
+
+    return {
+        "framework_id": analysis.framework_id,
+        "framework_name": analysis.framework_name,
+        "total_gaps": analysis.total_gaps,
+        "gaps": [
+            {
+                "control_id": g.control_id,
+                "title": g.title,
+                "family": g.family,
+                "priority": g.priority,
+                "recommendation": g.recommendation,
+            }
+            for g in analysis.gaps
+        ],
+        "quick_wins": [
+            {
+                "control_id": g.control_id,
+                "title": g.title,
+                "family": g.family,
+                "priority": g.priority,
+                "recommendation": g.recommendation,
+            }
+            for g in analysis.quick_wins
+        ],
+    }
 
 
 @router.get("/profiles")
@@ -549,22 +542,7 @@ async def evidence_summary(
         .limit(1)
     )
 
-    # Verify hash-chain integrity by walking records in order
-    chain_intact = True
-    broken_at = None
-    if total > 0:
-        chain_stmt = (
-            select(EvidenceRecord.record_hash, EvidenceRecord.previous_hash)
-            .order_by(EvidenceRecord.timestamp)
-        )
-        chain_result = await session.execute(chain_stmt)
-        prev_hash = None
-        for record_hash, previous_hash in chain_result.all():
-            if prev_hash is not None and previous_hash != prev_hash:
-                chain_intact = False
-                broken_at = record_hash
-                break
-            prev_hash = record_hash
+    chain_intact, broken_at = await verify_chain(session)
 
     return {
         "total_records": total,

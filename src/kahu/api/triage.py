@@ -244,7 +244,10 @@ async def pipeline_status() -> PipelineStatusResponse:
     except Exception:
         indexer_ok = False
 
+    from kahu.services.triage.poller import poller_running
+
     return PipelineStatusResponse(
+        pipeline_running=poller_running(),
         ollama_healthy=ollama_ok,
         wazuh_api_healthy=wazuh_api_ok,
         wazuh_indexer_healthy=indexer_ok,

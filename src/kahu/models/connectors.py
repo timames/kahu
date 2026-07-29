@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import DateTime, Enum as SAEnum, String, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON as JSONB  # JSON works on both Postgres and SQLite
 from sqlalchemy.orm import Mapped, mapped_column
 
 from kahu.models.base import Base, TimestampMixin, UUIDPrimaryKey

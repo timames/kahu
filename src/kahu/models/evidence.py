@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import DateTime, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON as JSONB  # JSON works on both Postgres and SQLite
 from sqlalchemy.orm import Mapped, mapped_column
 
 from kahu.models.base import Base, UUIDPrimaryKey

@@ -7,17 +7,15 @@ pipeline provenance. This provenance chain is itself compliance evidence
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
-from kahu.models.evidence import EvidenceRecord
+from kahu.services.compliance.controls import tags_for_alert
+from kahu.services.compliance.evidence import record_evidence
 
 if TYPE_CHECKING:
     from kahu.services.triage.pipeline import PipelineResult
@@ -56,6 +54,9 @@ async def persist_alert(
     """Save a triaged alert to the database and record evidence."""
     rule = raw_alert.get("rule", {})
 
+    # Derive compliance control tags from Wazuh rule groups
+    alert_control_tags = tags_for_alert(raw_alert) or ALERT_RAISED_CONTROLS
+
     alert = Alert(
         id=uuid.uuid4(),
         wazuh_alert_id=raw_alert.get("id", str(uuid.uuid4())),
@@ -67,17 +68,17 @@ async def persist_alert(
         enrichment=result.enrichment,
         llm_triage=result.llm_output,
         pipeline_provenance=result.provenance,
-        control_tags=ALERT_RAISED_CONTROLS,
+        control_tags=alert_control_tags,
     )
 
     session.add(alert)
     await session.flush()
 
     # Record to evidence store
-    await _record_evidence(
-        session=session,
+    await record_evidence(
+        session,
         event_type="alert_raised",
-        control_tags=ALERT_RAISED_CONTROLS,
+        control_tags=alert_control_tags,
         payload={
             "alert_id": str(alert.id),
             "rule_id": alert.rule_id,
@@ -116,8 +117,8 @@ async def record_disposition(
     session.add(disposition)
     await session.flush()
 
-    await _record_evidence(
-        session=session,
+    await record_evidence(
+        session,
         event_type="alert_dispositioned",
         control_tags=ALERT_DISPOSITIONED_CONTROLS,
         payload={
@@ -136,47 +137,3 @@ async def record_disposition(
     return disposition
 
 
-async def _record_evidence(
-    session: AsyncSession,
-    event_type: str,
-    control_tags: list[str],
-    payload: dict,
-    actor: str,
-) -> EvidenceRecord:
-    """Append a hash-chained record to the evidence store."""
-    # Get the previous hash for chain integrity
-    previous_hash = await _get_latest_hash(session)
-
-    # Compute this record's hash
-    record_content = json.dumps(
-        {"previous_hash": previous_hash, "event_type": event_type,
-         "control_tags": control_tags, "payload": payload, "actor": actor},
-        sort_keys=True, default=str,
-    )
-    record_hash = hashlib.sha256(record_content.encode()).hexdigest()
-
-    record = EvidenceRecord(
-        id=uuid.uuid4(),
-        event_type=event_type,
-        control_tags=control_tags,
-        payload=payload,
-        actor=actor,
-        previous_hash=previous_hash,
-        record_hash=record_hash,
-    )
-    session.add(record)
-    return record
-
-
-async def _get_latest_hash(session: AsyncSession) -> str:
-    """Get the hash of the most recent evidence record for chain linking."""
-    from sqlalchemy import select as sa_select, desc
-
-    stmt = (
-        sa_select(EvidenceRecord.record_hash)
-        .order_by(desc(EvidenceRecord.timestamp))
-        .limit(1)
-    )
-    result = await session.execute(stmt)
-    row = result.scalar_one_or_none()
-    return row or "0" * 64  # Genesis hash for first record

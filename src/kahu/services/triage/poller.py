@@ -81,6 +81,11 @@ async def poll_once() -> int:
 _poller_task: asyncio.Task | None = None
 
 
+def poller_running() -> bool:
+    """Return True if the poller task is alive."""
+    return _poller_task is not None and not _poller_task.done()
+
+
 async def run_poller(interval: float = 15.0) -> None:
     """Run the poller loop forever, polling every `interval` seconds."""
     global _poller_task

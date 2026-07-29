@@ -65,7 +65,8 @@ services:
     ports:
       - "1514:1514"
       - "1515:1515"
-      - "55000:55000"
+      # Wazuh API (55000) not exposed to host — Windows excludes this port range.
+      # Core container reaches it via Docker network at wazuh-manager:55000.
     environment:
       INDEXER_URL: https://wazuh-indexer:9200
       INDEXER_USERNAME: admin

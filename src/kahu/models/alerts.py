@@ -4,7 +4,7 @@ import enum
 import uuid
 
 from sqlalchemy import Enum, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON as JSONB  # JSON works on both Postgres and SQLite
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from kahu.models.base import Base, TimestampMixin, UUIDPrimaryKey

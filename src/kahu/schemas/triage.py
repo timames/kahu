@@ -98,6 +98,7 @@ class PipelineBatchResponse(BaseModel):
 
 
 class PipelineStatusResponse(BaseModel):
+    pipeline_running: bool
     ollama_healthy: bool
     wazuh_api_healthy: bool
     wazuh_indexer_healthy: bool
