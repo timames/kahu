@@ -123,6 +123,22 @@ export const getVulnResults = (taskId: string) => request(`/vulns/results/${task
 export const getScore = () => request<ScoreData>("/m/score");
 export const getTickets = () => request<{ tickets: Ticket[] }>("/m/tickets");
 
+// ── Pono Score ──
+export const getPonoScore = () => request<PonoSnapshot | null>("/pono/current");
+export const getPonoHistory = (limit = 100) =>
+  request<PonoHistoryResponse>(`/pono/history?limit=${limit}`);
+export const recalculatePono = () =>
+  request<PonoSnapshot>("/pono/recalculate", { method: "POST" });
+export const getPonoStatus = () =>
+  request<{ loop_running: boolean }>("/pono/status");
+
+// ── Validation ──
+export const getValidationDrift = () => request<ValidationDrift>("/validation/drift");
+export const getValidationRounds = (limit = 10) =>
+  request<ValidationRoundsResponse>(`/validation/rounds?limit=${limit}`);
+export const triggerValidation = (sampleSize = 13) =>
+  request<ValidationRoundData>(`/validation/rounds?sample_size=${sampleSize}`, { method: "POST" });
+
 // ── Types ──
 export interface TokenResponse {
   access_token: string;
@@ -260,4 +276,80 @@ export interface Ticket {
   status: string;
   created_at: string;
   alert_id: string;
+}
+
+export interface PonoComponent {
+  name: string;
+  raw_score: number;
+  weighted_score: number;
+  max_points: number;
+  assessed: boolean;
+  label: string;
+  evidence_age_days: number;
+  details: Record<string, unknown> | null;
+}
+
+export interface PonoSnapshot {
+  id: string;
+  timestamp: string;
+  pono_score: number;
+  schema_version: string;
+  components: PonoComponent[];
+  biggest_gain: {
+    component: string;
+    current_score: number;
+    max_points: number;
+    available_gain: number;
+    assessed: boolean;
+  } | null;
+  pono_drop: {
+    event: string;
+    current_score: number;
+    previous_score: number;
+    drop: number;
+  } | null;
+  trigger: string;
+}
+
+export interface PonoHistoryPoint {
+  id: string;
+  timestamp: string;
+  pono_score: number;
+  trigger: string;
+}
+
+export interface PonoHistoryResponse {
+  snapshots: PonoHistoryPoint[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface ValidationDrift {
+  has_validation: boolean;
+  drift_detected: boolean | null;
+  validation_rate: number | null;
+  pono_score_at_start: number | null;
+  round_id: string | null;
+  round_date: string | null;
+}
+
+export interface ValidationRoundData {
+  id: string;
+  started_at: string;
+  sample_size: number;
+  fleet_size: number;
+  samples_passed: number;
+  samples_failed: number;
+  samples_unreachable: number;
+  validation_rate: number | null;
+  drift_detected: boolean | null;
+  pono_score_at_start: number;
+}
+
+export interface ValidationRoundsResponse {
+  rounds: ValidationRoundData[];
+  total: number;
+  offset: number;
+  limit: number;
 }

@@ -12,7 +12,6 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
-import { useSettings } from "@/hooks/useSettings";
 import { useAuth } from "@/hooks/useAuth";
 
 interface NavItem {
@@ -23,6 +22,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/", icon: Activity, label: "Glance" },
+  { to: "/score", icon: Trophy, label: "Score" },
   { to: "/feed", icon: ListFilter, label: "Feed" },
   { to: "/investigate", icon: MessageSquare, label: "Investigate" },
   { to: "/reports", icon: FileText, label: "Reports" },
@@ -32,16 +32,12 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/arsenal", icon: Swords, label: "Arsenal" },
 ];
 
-const GAMIFICATION_ITEM: NavItem = { to: "/score", icon: Trophy, label: "Score" };
 const SETTINGS_ITEM: NavItem = { to: "/settings", icon: Settings, label: "Settings" };
 
 export function Layout() {
-  const { gamificationEnabled } = useSettings();
   const { username, logout } = useAuth();
 
-  const items = [...NAV_ITEMS];
-  if (gamificationEnabled) items.push(GAMIFICATION_ITEM);
-  items.push(SETTINGS_ITEM);
+  const items = [...NAV_ITEMS, SETTINGS_ITEM];
 
   return (
     <div className="flex h-full">
