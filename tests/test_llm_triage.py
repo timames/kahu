@@ -10,6 +10,32 @@ from kahu.services.triage.llm_triage import (
 )
 
 
+def _rule_history(history: list) -> dict:
+    """Build the aggregate rule-history block the way enrichment.py does.
+
+    ``_build_prompt_data`` reads ``data["rule_history"]`` (a dict of aggregate
+    stats + recent_examples), not a raw list. Mirror that shape so the test
+    exercises the real contract.
+    """
+    if not history:
+        return {}
+    verdict_breakdown: dict[str, int] = {}
+    for h in history:
+        v = h.get("verdict", "")
+        verdict_breakdown[v] = verdict_breakdown.get(v, 0) + 1
+    total = len(history)
+    fp_count = verdict_breakdown.get("false_positive", 0) + verdict_breakdown.get("acknowledged", 0)
+    tp_count = verdict_breakdown.get("true_positive", 0)
+    return {
+        "total_dispositions": total,
+        "verdict_breakdown": verdict_breakdown,
+        "false_positive_rate": round(fp_count / total, 2) if total else 0,
+        "false_positive_count": fp_count,
+        "true_positive_count": tp_count,
+        "recent_examples": history,
+    }
+
+
 def _make_enriched(
     rule_id: str = "100",
     level: int = 7,
@@ -34,7 +60,7 @@ def _make_enriched(
             "asset_context": {"hostname": agent_name, "ip": "10.0.0.1"},
             "related_events": related or [],
             "vuln_state": vuln or {},
-            "historical_dispositions": history or [],
+            "rule_history": _rule_history(history),
         },
         sources=["alert_data"],
         prompt_hash="abc123",

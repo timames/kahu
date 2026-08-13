@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
 from kahu.models.tickets import Ticket, TicketStatus, TicketType
 from kahu.models.xp import XpEvent
+from kahu.services.compliance.evidence import record_evidence
 from kahu.services.triage.disposition import record_disposition
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,50 @@ TOLERANCE_THRESHOLDS: dict[int, tuple[float, float | None]] = {
     3: (0.60, 0.75),       # Aggressive
 }
 
+TOLERANCE_LABELS: dict[int, str] = {1: "Conservative", 2: "Balanced", 3: "Aggressive"}
+
+# A tolerance change moves the global auto-dismiss posture for the whole
+# appliance, so it is change-management evidence, not just a setting.
+TOLERANCE_CHANGE_CONTROLS = [
+    "800-171:3.4.1",   # Baseline configuration
+    "800-171:3.4.2",   # Change control for configuration settings
+    "800-171:3.3.1",   # Create and retain audit records
+    "CIS:4.2",         # Establish and maintain a secure configuration process
+    "SOC2:CC8.1",      # Change management
+]
+
+# --- Deterministic floor on auto-dismissal ---------------------------------
+# The model advises; the ruleset governs. pipeline._bound_severity enforces
+# that for the *displayed* severity, but auto-acknowledgement is a separate
+# action that silently closes an alert, and it did not re-apply the floor. The
+# model reads attacker-controllable log content (inside <ALERT_DATA>), so it
+# must never be able to drive a high/critical DETERMINISTIC finding — or any
+# CRITICAL_RULE_IDS hit — to auto-dismissed. Going quiet on those is a human's
+# call. Auto-confirm/escalate is deliberately unaffected: erring toward
+# visibility is safe; erring toward silence is the failure this pipeline
+# exists to prevent. This mirrors the filter stage's "never suppress" guarantee
+# and the nociceptive-receptor rule in the design docs: the dangerous class is
+# exempt from every suppression path, regardless of tolerance or history.
+NON_DISMISSIBLE_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
+
+
+def auto_dismiss_forbidden(
+    deterministic_severity: str | None,
+    critical_rule: bool = False,
+) -> bool:
+    """Return True if the deterministic floor forbids auto-acknowledging.
+
+    ``deterministic_severity`` is the severity assigned by the filter stage
+    (``filters.FilterResult.severity``), NOT the model-bounded severity — the
+    whole point is to bypass any one-band laundering the model may have done.
+    ``critical_rule`` is ``filters.FilterResult.critical_rule`` (a
+    ``CRITICAL_RULE_IDS`` match), which is forbidden even if its mapped severity
+    is somehow lower.
+    """
+    if critical_rule:
+        return True
+    return (deterministic_severity or "").strip().lower() in NON_DISMISSIBLE_SEVERITIES
+
 # Runtime tolerance — set via API, defaults to balanced
 _current_tolerance: int = 2
 
@@ -49,26 +94,86 @@ def set_tolerance(level: int) -> None:
     _current_tolerance = max(1, min(3, level))
 
 
+async def set_tolerance_audited(
+    level: int,
+    session: AsyncSession,
+    actor: str,
+) -> int:
+    """Set the global auto-dispose tolerance and record the change as evidence.
+
+    The tolerance is a global suppression-posture dial: aggressive mode lowers
+    the auto-dismiss bar for the whole appliance. A change to it is a security-
+    relevant configuration event, so it is appended to the hash-chained evidence
+    store (change-management control) with the actor who made it, making the
+    change attributable and tamper-evident. Returns the effective (clamped)
+    level. The caller owns the request; this commits the evidence record.
+    """
+    old_level = get_tolerance()
+    set_tolerance(level)
+    new_level = get_tolerance()
+
+    dismiss, confirm = TOLERANCE_THRESHOLDS.get(new_level, (None, None))
+    await record_evidence(
+        session,
+        event_type="auto_disposition_tolerance_changed",
+        control_tags=TOLERANCE_CHANGE_CONTROLS,
+        payload={
+            "old_level": old_level,
+            "new_level": new_level,
+            "old_label": TOLERANCE_LABELS.get(old_level),
+            "new_label": TOLERANCE_LABELS.get(new_level),
+            "changed": old_level != new_level,
+            "auto_dismiss_threshold": dismiss,
+            "auto_confirm_threshold": confirm,
+        },
+        actor=actor,
+    )
+    await session.commit()
+    logger.info(
+        "Auto-dispose tolerance set to %s (%s) by %s [was %s]",
+        new_level, TOLERANCE_LABELS.get(new_level), actor, old_level,
+    )
+    return new_level
+
+
 @dataclass
 class AutoDispositionResult:
     auto_handled: bool = False
     verdict: str | None = None
     confidence: float = 0.0
     ticket_created: bool = False
+    # True when a would-be auto-dismiss was refused by the deterministic floor
+    # (high/critical deterministic severity or a critical-rule hit). Surfaced so
+    # the pipeline can stamp provenance and the refusal is auditable.
+    floor_blocked_dismiss: bool = False
 
 
 async def maybe_auto_dispose(
     alert: Alert,
     llm_output: dict | None,
     session: AsyncSession,
+    *,
+    deterministic_severity: str | None = None,
+    critical_rule: bool = False,
 ) -> AutoDispositionResult:
     """Check if an alert can be auto-dispositioned based on AI confidence.
 
     Returns whether it was handled. Alerts that aren't auto-handled stay in
     the feed for human review.
+
+    ``deterministic_severity`` and ``critical_rule`` come from the filter stage
+    (``FilterResult.severity`` / ``FilterResult.critical_rule``) and enforce the
+    deterministic floor on auto-dismissal — see ``auto_dismiss_forbidden``. They
+    are keyword-only with safe defaults so callers that cannot supply them keep
+    working; the production pipeline always supplies them.
     """
     if not llm_output or llm_output.get("degraded"):
         return AutoDispositionResult()
+
+    # The ruleset governs. A high/critical deterministic finding (or a
+    # critical-rule hit) can never be auto-acknowledged, regardless of tolerance,
+    # model confidence, or rule-FP history. It goes to a human.
+    dismiss_blocked = auto_dismiss_forbidden(deterministic_severity, critical_rule)
 
     confidence = llm_output.get("confidence", 0.0)
     ai_verdict = llm_output.get("recommended_verdict")
@@ -92,6 +197,16 @@ async def maybe_auto_dispose(
 
     # Check for auto-acknowledge (false positive)
     if ai_verdict == "acknowledged":
+        if dismiss_blocked:
+            # A would-be dismissal on a high/critical deterministic finding.
+            # Refuse it and route to a human — this is the injection / numb-key
+            # failure mode the floor exists to stop.
+            logger.info(
+                "Auto-dismiss refused by deterministic floor for alert %s "
+                "(deterministic_severity=%s critical_rule=%s)",
+                alert.id, deterministic_severity, critical_rule,
+            )
+            return AutoDispositionResult(floor_blocked_dismiss=True)
         # Compute dismiss confidence by combining available signals
         if llm_output.get("recommended_verdict") == "acknowledged":
             dismiss_conf = confidence
@@ -159,10 +274,17 @@ def _infer_verdict(
     llm_severity: str | None,
     rule_fp_rate: float | None = None,
 ) -> str | None:
-    """Infer verdict from LLM data and disposition history.
+    """Infer a *recommended* verdict from LLM data and disposition history.
 
     History is the strongest signal — if a rule is consistently FP, new
     instances of the same rule are almost certainly FP too.
+
+    This is a recommender, not an enforcer. It can and does return
+    "acknowledged" on a poisoned rule-FP history even for a serious finding;
+    the deterministic floor that refuses to ACT on that recommendation lives at
+    the single decision point in ``maybe_auto_dispose`` (``dismiss_blocked``),
+    so the block is observable and cannot be bypassed by a caller that forgets
+    to re-apply it here.
     """
     # Disposition history — strongest signal
     if rule_fp_rate is not None and rule_fp_rate >= 0.6:

@@ -44,7 +44,17 @@ DISPOSITION HISTORY IS YOUR STRONGEST SIGNAL:
   lower rule levels.
 - Cite the disposition stats in your explanation (e.g., "This rule has been
   dismissed as FP in 94 of 100 prior instances").
-- When history is absent, rely on alert content and context alone.\
+- When history is absent, rely on alert content and context alone.
+
+SEVERITY FLOOR — HISTORY MAY NOT SILENCE A HIGH/CRITICAL FINDING:
+- If the alert's rule Level is 10 or above (high/critical), disposition history
+  and a noisy host may LOWER your confidence but MUST NOT make your verdict
+  "acknowledge". For these, choose "true_positive" or "escalate", or state that
+  a human must confirm. A high acknowledge rate on a serious rule can be the
+  result of an attacker pacing activity to look routine; it is not a licence to
+  go quiet. This mirrors a hard rule downstream: high/critical findings are
+  never auto-dismissed, so recommending "acknowledge" there only misleads the
+  reader without closing the alert.\
 """
 
 USER_PROMPT_TEMPLATE = """\

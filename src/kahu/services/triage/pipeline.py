@@ -114,12 +114,23 @@ async def run_pipeline(
             alert = await persist_alert(result, raw_alert, session)
             result.alert_id = str(alert.id)
 
-            # Stage 5: Auto-disposition (AI handles obvious cases)
-            auto_result = await maybe_auto_dispose(alert, llm_result, session)
+            # Stage 5: Auto-disposition (AI handles obvious cases).
+            # Pass the DETERMINISTIC severity and critical-rule flag so the
+            # ruleset keeps governing the auto-dismiss decision, not just the
+            # displayed severity number.
+            auto_result = await maybe_auto_dispose(
+                alert, llm_result, session,
+                deterministic_severity=filtered.severity,
+                critical_rule=filtered.critical_rule,
+            )
             if auto_result.auto_handled:
                 result.provenance["auto_disposed"] = True
                 result.provenance["auto_verdict"] = auto_result.verdict
                 result.provenance["auto_confidence"] = auto_result.confidence
+            if auto_result.floor_blocked_dismiss:
+                # A model-driven dismissal was refused by the deterministic
+                # floor. Record it: this is a security-relevant event.
+                result.provenance["auto_dismiss_blocked_by_floor"] = True
         except Exception:
             logger.error("Failed to persist alert", exc_info=True)
 

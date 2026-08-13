@@ -20,6 +20,10 @@ class FilterResult:
     severity: str = "medium"
     rules_fired: list[str] = field(default_factory=list)
     correlation_key: str | None = None
+    # True when the alert matched CRITICAL_RULE_IDS. This is the deterministic
+    # "never suppress" signal; downstream stages (auto-disposition) read it to
+    # keep the ruleset governing after the model has spoken.
+    critical_rule: bool = False
 
 
 # Rule IDs known to be high-noise in SMB/AEC environments (from ISE deployment tuning).
@@ -107,6 +111,7 @@ def apply_deterministic_filters(
             severity=severity,
             rules_fired=rules_fired,
             correlation_key=_correlation_key(rule_id, agent_name),
+            critical_rule=True,
         )
 
     # --- Suppress known noisy rules ---

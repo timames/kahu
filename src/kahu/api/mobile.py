@@ -11,13 +11,17 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from kahu.api.deps import get_current_user
 from kahu.db import get_session
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
 from kahu.models.tickets import Ticket, TicketStatus, TicketType
+from kahu.models.users import User
 from kahu.models.xp import XpEvent
 from kahu.services.triage.disposition import record_disposition
 from kahu.services.triage.auto_disposition import (
-    maybe_auto_dispose, get_tolerance, set_tolerance as _set_tolerance,
+    get_tolerance,
+    maybe_auto_dispose,
+    set_tolerance_audited,
 )
 
 router = APIRouter()
@@ -806,9 +810,13 @@ async def get_tol():
 
 
 @router.put("/tolerance", response_model=ToleranceOut)
-async def set_tol(body: ToleranceIn):
-    _set_tolerance(body.level)
-    level = get_tolerance()
+async def set_tol(
+    body: ToleranceIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    # Changing the global auto-dismiss posture is an audited, attributable event.
+    level = await set_tolerance_audited(body.level, session=session, actor=user.email)
     dismiss, confirm = TOLERANCE_THRESHOLDS[level]
     return ToleranceOut(
         level=level,
