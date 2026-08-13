@@ -18,6 +18,7 @@ from kahu.models.tickets import Ticket, TicketStatus, TicketType
 from kahu.models.users import User
 from kahu.models.xp import XpEvent
 from kahu.services.triage.disposition import record_disposition
+from kahu.services.triage.llm_triage import canonical_verdict
 from kahu.services.triage.auto_disposition import (
     get_tolerance,
     maybe_auto_dispose,
@@ -185,19 +186,18 @@ async def feed(
         raw = a.raw_event or {}
         source_ip = raw.get("data", {}).get("srcip") or raw.get("data", {}).get("src_ip")
 
-        # Derive AI verdict: use LLM's explicit recommendation, or infer from confidence + benign
-        ai_verdict = llm.get("recommended_verdict")
+        # Derive AI verdict: use LLM's explicit recommendation, or infer from confidence + benign.
+        # canonical_verdict also folds the legacy "acknowledge"/"false_positive"
+        # spellings still present in previously-stored llm_triage payloads.
+        ai_verdict = canonical_verdict(llm.get("recommended_verdict"))
         ai_confidence = llm.get("confidence", 0.0)
-        # Normalize legacy "false_positive" to "acknowledge"
-        if ai_verdict == "false_positive":
-            ai_verdict = "acknowledge"
         if not ai_verdict and not llm.get("degraded"):
             # Infer from confidence and benign explanations
             benign = llm.get("benign_explanations", [])
             if ai_confidence >= 0.7 and not benign:
                 ai_verdict = "true_positive"
             elif ai_confidence < 0.3 or len(benign) >= 2:
-                ai_verdict = "acknowledge"
+                ai_verdict = "acknowledged"
             elif ai_confidence >= 0.5:
                 ai_verdict = "escalate"
 

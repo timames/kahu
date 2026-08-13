@@ -21,8 +21,16 @@ from __future__ import annotations
 
 import inspect
 
-import pytest
+# aiosqlite is a declared dev dependency and these cases must FAIL, not skip, if
+# it is missing — a silently skipped security regression test is the same as no
+# test at all.
+import aiosqlite  # noqa: F401
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
+import kahu.models  # noqa: F401  — register every table on Base.metadata
+from kahu.models.alerts import Alert, Severity
+from kahu.models.base import Base
 from kahu.services.triage.auto_disposition import (
     NON_DISMISSIBLE_SEVERITIES,
     _infer_verdict,
@@ -138,16 +146,6 @@ def test_critical_rule_flows_from_filters():
 # suppression-injection arm — an alert whose model output screams "benign,
 # dismiss" must NOT close when the deterministic finding is critical.
 # --------------------------------------------------------------------------
-aiosqlite = pytest.importorskip("aiosqlite")
-
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
-from sqlalchemy.pool import StaticPool  # noqa: E402
-
-import kahu.models  # noqa: F401,E402  — register every table on Base.metadata
-from kahu.models.alerts import Alert, Severity  # noqa: E402
-from kahu.models.base import Base  # noqa: E402
-
-
 async def _make_session():
     engine = create_async_engine(
         "sqlite+aiosqlite://",
@@ -209,6 +207,83 @@ async def test_critical_rule_flag_blocks_dismiss():
         )
     assert result.auto_handled is False
     assert result.floor_blocked_dismiss is True
+
+
+# The model recommending dismissal OUTRIGHT, rather than it being inferred. This
+# path only became reachable once the verdict spelling was canonicalised
+# ("acknowledge" -> "acknowledged"); before that the comparison never matched and
+# an explicit recommendation was silently ignored. It is the most direct
+# injection route — attacker-controlled log text talking the model into naming
+# the dismissal itself — so the floor has to hold here too.
+_EXPLICIT_DISMISS_LLM = {
+    "severity": "info",
+    "recommended_verdict": "acknowledged",
+    "benign_explanations": ["routine backup job"],
+    "confidence": 0.99,                   # far above every tolerance threshold
+    "degraded": False,
+}
+
+
+async def test_explicit_model_dismissal_is_blocked_on_critical():
+    session_factory = await _make_session()
+    async with session_factory() as session:
+        alert = await _insert_alert(session, Severity.HIGH)
+        result = await maybe_auto_dispose(
+            alert, _EXPLICIT_DISMISS_LLM, session,
+            deterministic_severity="critical",
+            critical_rule=False,
+        )
+    assert result.auto_handled is False
+    assert result.floor_blocked_dismiss is True
+
+
+async def test_explicit_model_dismissal_is_blocked_on_critical_rule():
+    session_factory = await _make_session()
+    async with session_factory() as session:
+        alert = await _insert_alert(session, Severity.LOW, rule_id="554")
+        result = await maybe_auto_dispose(
+            alert, _EXPLICIT_DISMISS_LLM, session,
+            deterministic_severity="low",
+            critical_rule=True,
+        )
+    assert result.auto_handled is False
+    assert result.floor_blocked_dismiss is True
+
+
+async def test_explicit_model_dismissal_works_on_low_severity():
+    # The path is genuinely live — it closes an ordinary noise alert.
+    session_factory = await _make_session()
+    async with session_factory() as session:
+        alert = await _insert_alert(session, Severity.LOW)
+        result = await maybe_auto_dispose(
+            alert, _EXPLICIT_DISMISS_LLM, session,
+            deterministic_severity="low",
+            critical_rule=False,
+        )
+    assert result.auto_handled is True
+    assert result.verdict == "acknowledged"
+
+
+async def test_legacy_verdict_spelling_is_honoured():
+    # Payloads stored before canonicalisation used the bare verb. They must
+    # behave identically — including being blocked by the floor.
+    legacy = dict(_EXPLICIT_DISMISS_LLM, recommended_verdict="acknowledge")
+    session_factory = await _make_session()
+    async with session_factory() as session:
+        blocked = await _insert_alert(session, Severity.HIGH)
+        blocked_result = await maybe_auto_dispose(
+            blocked, legacy, session,
+            deterministic_severity="critical",
+            critical_rule=False,
+        )
+        allowed = await _insert_alert(session, Severity.LOW, rule_id="1001")
+        allowed_result = await maybe_auto_dispose(
+            allowed, legacy, session,
+            deterministic_severity="low",
+            critical_rule=False,
+        )
+    assert blocked_result.floor_blocked_dismiss is True
+    assert allowed_result.auto_handled is True
 
 
 async def test_low_deterministic_still_auto_dismisses():

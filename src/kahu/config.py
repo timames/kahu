@@ -1,8 +1,31 @@
+from pathlib import Path
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_config_dir() -> Path:
+    """Locate the JSON config directory (weights_schema.json, tuning_config.json, …).
+
+    From a source checkout this file is ``<repo>/src/kahu/config.py``, so the
+    sibling of ``src/`` is the repo root. From an installed wheel that walk lands
+    somewhere in ``site-packages`` and there is no ``config/`` there — fall back to
+    a path relative to the working directory, which is ``/app`` in the container
+    (the Dockerfile copies ``config/`` to ``/app/config`` and sets
+    ``KAHU_CONFIG_DIR`` explicitly).
+    """
+    checkout = Path(__file__).resolve().parents[2] / "config"
+    if checkout.is_dir():
+        return checkout
+    return Path("config")
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    # JSON config directory. Same env var name kahu_tuner already uses, so a
+    # deployment configures both services with one setting.
+    kahu_config_dir: Path = Field(default_factory=_default_config_dir)
 
     # Database
     database_url: str = "postgresql+asyncpg://kahu:changeme@localhost:5432/kahu"

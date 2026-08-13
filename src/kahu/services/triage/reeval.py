@@ -19,7 +19,7 @@ from kahu.db import async_session
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict
 from kahu.clients.ollama import OllamaClient
 from kahu.services.triage.enrichment import enrich_alert_group
-from kahu.services.triage.llm_triage import run_llm_triage
+from kahu.services.triage.llm_triage import canonical_verdict, run_llm_triage
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +114,9 @@ async def run_reeval_cycle() -> dict:
                 if ollama_healthy:
                     # Re-run LLM triage
                     llm_result = await run_llm_triage(enriched, ollama)
-                    verdict = llm_result.get("recommended_verdict")
-
-                    # Normalize legacy
-                    if verdict == "false_positive":
-                        verdict = "acknowledge"
+                    # Already canonical from _parse_llm_response; normalise again
+                    # so a hand-built or legacy payload can't slip through.
+                    verdict = canonical_verdict(llm_result.get("recommended_verdict"))
 
                     if verdict in ("true_positive", "escalate"):
                         # Alert needs human attention again — remove disposition

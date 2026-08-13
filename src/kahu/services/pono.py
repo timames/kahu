@@ -10,6 +10,7 @@ from pathlib import Path
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from kahu.config import settings
 from kahu.db import async_session
 from kahu.models.alerts import Alert, AlertDisposition, Severity
 from kahu.models.connectors import ConnectorInstance, ConnectorStatus
@@ -28,14 +29,30 @@ from kahu_pono.freshness import evidence_age_days
 
 log = logging.getLogger("kahu.pono")
 
-_SCHEMA_PATH = Path(__file__).resolve().parents[3] / "config" / "weights_schema.json"
 _schema: WeightsSchema | None = None
+
+
+def schema_path() -> Path:
+    """Resolved location of the Pono weights schema.
+
+    Derived from ``settings.kahu_config_dir`` rather than walked relative to this
+    module: the walk only worked from a source checkout, so an installed package
+    (the container) silently lost its weights and the score stopped updating.
+    """
+    return Path(settings.kahu_config_dir) / "weights_schema.json"
 
 
 def _get_schema() -> WeightsSchema:
     global _schema
     if _schema is None:
-        _schema = WeightsSchema.from_file(_SCHEMA_PATH)
+        path = schema_path()
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"Pono weights schema not found at {path}. Set KAHU_CONFIG_DIR to the "
+                f"directory holding weights_schema.json (repo root 'config/' in dev, "
+                f"/app/config in the container)."
+            )
+        _schema = WeightsSchema.from_file(path)
     return _schema
 
 

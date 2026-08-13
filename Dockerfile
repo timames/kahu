@@ -14,6 +14,11 @@ RUN pip install --no-cache-dir .
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 
+# Runtime JSON config (Pono weights, tuning/risk/canary configs). The package is
+# installed into site-packages, so it cannot find these relative to its own path.
+COPY config/ ./config/
+ENV KAHU_CONFIG_DIR=/app/config
+
 RUN chown -R kahu:kahu /app
 USER kahu
 

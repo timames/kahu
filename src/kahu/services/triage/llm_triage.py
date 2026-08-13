@@ -35,8 +35,8 @@ RULES:
 
 DISPOSITION HISTORY IS YOUR STRONGEST SIGNAL:
 - If a rule's acknowledge rate is above 80%, your default verdict MUST be
-  "acknowledge" unless THIS specific alert has clear indicators of compromise.
-- If a rule's acknowledge rate is above 50%, lean toward "acknowledge" and
+  "acknowledged" unless THIS specific alert has clear indicators of compromise.
+- If a rule's acknowledge rate is above 50%, lean toward "acknowledged" and
   explain what would make this instance different from the historical norm.
 - If a host/agent has a high acknowledge rate, treat new alerts from it with
   increased skepticism — it is likely a noisy host.
@@ -49,11 +49,11 @@ DISPOSITION HISTORY IS YOUR STRONGEST SIGNAL:
 SEVERITY FLOOR — HISTORY MAY NOT SILENCE A HIGH/CRITICAL FINDING:
 - If the alert's rule Level is 10 or above (high/critical), disposition history
   and a noisy host may LOWER your confidence but MUST NOT make your verdict
-  "acknowledge". For these, choose "true_positive" or "escalate", or state that
+  "acknowledged". For these, choose "true_positive" or "escalate", or state that
   a human must confirm. A high acknowledge rate on a serious rule can be the
   result of an attacker pacing activity to look routine; it is not a licence to
   go quiet. This mirrors a hard rule downstream: high/critical findings are
-  never auto-dismissed, so recommending "acknowledge" there only misleads the
+  never auto-dismissed, so recommending "acknowledged" there only misleads the
   reader without closing the alert.\
 """
 
@@ -67,13 +67,36 @@ Analyze this security alert and provide a structured triage assessment.
 Respond with ONLY valid JSON in this exact format:
 {{
   "severity": "critical|high|medium|low|info",
-  "recommended_verdict": "true_positive|acknowledge|escalate",
+  "recommended_verdict": "true_positive|acknowledged|escalate",
   "explanation": "Plain-English explanation of what happened and why it matters",
   "benign_explanations": ["List of probable benign explanations if any"],
   "recommended_actions": ["Specific next steps for the analyst"],
   "confidence": 0.0 to 1.0
 }}
 """
+
+
+# The canonical verdict vocabulary is DispositionVerdict's (models/alerts.py) —
+# "acknowledged", not "acknowledge". Models emit the bare verb regardless of what
+# the prompt asks for, and older stored triage output used it too, so accept both
+# spellings on the way in and normalise to the canonical one. Downstream
+# comparisons (auto_disposition.maybe_auto_dispose, reeval, the feed API) all key
+# on the canonical value; leaving the variant spelling in place silently disables
+# every one of them.
+_VERDICT_ALIASES: dict[str, str] = {
+    "acknowledge": "acknowledged",
+    "false_positive": "acknowledged",  # legacy — DispositionVerdict maps it the same way
+}
+VALID_VERDICTS: frozenset[str] = frozenset({"true_positive", "acknowledged", "escalate"})
+
+
+def canonical_verdict(raw: str | None) -> str | None:
+    """Normalise a model-supplied verdict, or None if it isn't one we accept."""
+    if not raw:
+        return None
+    v = raw.strip().lower()
+    v = _VERDICT_ALIASES.get(v, v)
+    return v if v in VALID_VERDICTS else None
 
 
 class LLMTriageOutput(BaseModel):
@@ -259,9 +282,9 @@ def _parse_llm_response(raw: str) -> dict:
         # Validate severity is in allowed set
         if result["severity"] not in {"critical", "high", "medium", "low", "info", None}:
             result["severity"] = None
-        # Validate verdict
-        if result.get("recommended_verdict") not in {"true_positive", "acknowledge", "escalate", None}:
-            result["recommended_verdict"] = None
+        # Normalise the verdict to the canonical DispositionVerdict spelling;
+        # unrecognised values become None ("no recommendation").
+        result["recommended_verdict"] = canonical_verdict(result.get("recommended_verdict"))
         return result
     except (json.JSONDecodeError, Exception) as e:
         logger.warning("Failed to parse LLM response as JSON: %s", e)

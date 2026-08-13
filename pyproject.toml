@@ -32,6 +32,8 @@ dev = [
     "ruff>=0.5,<1",
     "mypy>=1.10,<2",
     "httpx",
+    # The DB-backed tests run the async models on in-memory SQLite.
+    "aiosqlite>=0.20,<1",
 ]
 
 [build-system]

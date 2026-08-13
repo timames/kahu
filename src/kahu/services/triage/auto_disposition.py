@@ -24,6 +24,7 @@ from kahu.models.tickets import Ticket, TicketStatus, TicketType
 from kahu.models.xp import XpEvent
 from kahu.services.compliance.evidence import record_evidence
 from kahu.services.triage.disposition import record_disposition
+from kahu.services.triage.llm_triage import canonical_verdict
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +177,12 @@ async def maybe_auto_dispose(
     dismiss_blocked = auto_dismiss_forbidden(deterministic_severity, critical_rule)
 
     confidence = llm_output.get("confidence", 0.0)
-    ai_verdict = llm_output.get("recommended_verdict")
+    # Canonical spelling ("acknowledged"), folding the legacy "acknowledge" and
+    # "false_positive" variants that older stored payloads still carry. This is
+    # normalised at the parse boundary too; doing it again here means a caller
+    # that hand-builds llm_output cannot silently disable the comparisons below.
+    explicit_verdict = canonical_verdict(llm_output.get("recommended_verdict"))
+    ai_verdict = explicit_verdict
     benign = llm_output.get("benign_explanations", [])
     severity = alert.severity.value if isinstance(alert.severity, Severity) else alert.severity
     llm_severity = llm_output.get("severity", "medium")
@@ -208,7 +214,9 @@ async def maybe_auto_dispose(
             )
             return AutoDispositionResult(floor_blocked_dismiss=True)
         # Compute dismiss confidence by combining available signals
-        if llm_output.get("recommended_verdict") == "acknowledged":
+        if explicit_verdict == "acknowledged":
+            # The model recommended dismissal outright, so its stated confidence
+            # IS its confidence in dismissing. Still bounded by the floor above.
             dismiss_conf = confidence
         else:
             # LLM-derived FP confidence (inverted — low threat = high FP)

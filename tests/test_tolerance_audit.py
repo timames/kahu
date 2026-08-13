@@ -8,18 +8,18 @@ knob that widens the system's blind spot leaves no trace.
 
 from __future__ import annotations
 
+# aiosqlite is a declared dev dependency; these cases must FAIL, not skip, if it
+# is missing.
+import aiosqlite  # noqa: F401
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
-pytest.importorskip("aiosqlite")
-
-from sqlalchemy import select  # noqa: E402
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
-from sqlalchemy.pool import StaticPool  # noqa: E402
-
-import kahu.models  # noqa: F401,E402  — register every table on Base.metadata
-from kahu.models.base import Base  # noqa: E402
-from kahu.models.evidence import EvidenceRecord  # noqa: E402
-from kahu.services.triage.auto_disposition import (  # noqa: E402
+import kahu.models  # noqa: F401  — register every table on Base.metadata
+from kahu.models.base import Base
+from kahu.models.evidence import EvidenceRecord
+from kahu.services.triage.auto_disposition import (
     TOLERANCE_CHANGE_CONTROLS,
     get_tolerance,
     set_tolerance,

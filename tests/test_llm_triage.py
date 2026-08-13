@@ -4,9 +4,11 @@ import json
 
 from kahu.services.triage.enrichment import EnrichedAlert
 from kahu.services.triage.llm_triage import (
+    USER_PROMPT_TEMPLATE,
     _build_prompt_data,
     _degraded_result,
     _parse_llm_response,
+    canonical_verdict,
 )
 
 
@@ -159,6 +161,64 @@ class TestResponseParsing:
         result = _parse_llm_response("")
         assert result["severity"] is None
         assert result.get("parse_error") is True
+
+
+class TestVerdictCanonicalisation:
+    """The verdict vocabulary must match DispositionVerdict ("acknowledged").
+
+    Downstream auto-disposition, re-evaluation and the feed API all compare
+    against the canonical spelling. A model that emits the bare verb, or an older
+    stored payload using the legacy value, must still land on it — otherwise
+    every one of those comparisons silently stops matching.
+    """
+
+    def test_bare_verb_is_canonicalised(self):
+        assert canonical_verdict("acknowledge") == "acknowledged"
+
+    def test_canonical_value_passes_through(self):
+        assert canonical_verdict("acknowledged") == "acknowledged"
+        assert canonical_verdict("true_positive") == "true_positive"
+        assert canonical_verdict("escalate") == "escalate"
+
+    def test_legacy_false_positive_maps_to_acknowledged(self):
+        assert canonical_verdict("false_positive") == "acknowledged"
+
+    def test_case_and_whitespace_insensitive(self):
+        assert canonical_verdict("  ACKNOWLEDGE ") == "acknowledged"
+        assert canonical_verdict("True_Positive") == "true_positive"
+
+    def test_unknown_and_empty_become_none(self):
+        assert canonical_verdict("delete_everything") is None
+        assert canonical_verdict("") is None
+        assert canonical_verdict(None) is None
+
+    def test_parse_canonicalises_model_output(self):
+        response = json.dumps({
+            "severity": "low",
+            "recommended_verdict": "acknowledge",
+            "explanation": "Known scanner",
+            "benign_explanations": [],
+            "recommended_actions": [],
+            "confidence": 0.9,
+        })
+        assert _parse_llm_response(response)["recommended_verdict"] == "acknowledged"
+
+    def test_parse_drops_unrecognised_verdict(self):
+        response = json.dumps({
+            "severity": "low",
+            "recommended_verdict": "ignore_forever",
+            "explanation": "x",
+            "benign_explanations": [],
+            "recommended_actions": [],
+            "confidence": 0.9,
+        })
+        assert _parse_llm_response(response)["recommended_verdict"] is None
+
+    def test_prompt_advertises_the_canonical_spelling(self):
+        # The wire protocol we ask the model for and the vocabulary we compare
+        # against must not drift apart again.
+        assert "acknowledged" in USER_PROMPT_TEMPLATE
+        assert "|acknowledge|" not in USER_PROMPT_TEMPLATE
 
 
 class TestDegradedResult:
