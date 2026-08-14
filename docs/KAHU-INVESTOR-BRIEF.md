@@ -1,8 +1,8 @@
 # Kahu — Project A to Z
 
 **Prepared by:** ComplyHI
-**Date:** July 2026
-**Status:** Working product with live pilot deployment
+**Date:** August 2026
+**Status:** Working product, deployed and running on test infrastructure
 
 ---
 
@@ -34,7 +34,7 @@ Kahu functions as their tier-1 SOC analyst in a box. It watches everything, surf
 
 1. **Collects** — Wazuh agents on every endpoint, plus syslog/NetFlow/API ingestion from firewalls, cloud services, and network gear. A wizard-driven connector framework makes attaching a new source something an office manager can do.
 
-2. **Triages** — A 4-stage pipeline processes every alert: deterministic filtering strips noise, enrichment adds context, the local AI assesses severity and explains what happened, and the result lands in a mobile-first swipe interface where the analyst acknowledges, escalates, or confirms each alert in seconds.
+2. **Triages** — A 5-stage pipeline processes every alert: deterministic filtering strips noise, enrichment adds context, the local AI assesses severity and explains what happened, auto-disposition handles the obvious cases, and the result lands in a mobile-first swipe interface where the analyst acknowledges, escalates, or confirms each alert in seconds. A deterministic floor guarantees that critical alerts can never be silently dismissed, regardless of what the model recommends.
 
 3. **Investigates** — A chat interface where anyone can ask "show me failed logins from outside the US this week" and get a plain-English answer backed by the raw data one click below.
 
@@ -42,7 +42,13 @@ Kahu functions as their tier-1 SOC analyst in a box. It watches everything, surf
 
 5. **Complies** — Every detection, disposition, and response action is automatically mapped to compliance framework controls and retained in a tamper-evident, hash-chained evidence store. Assessment evidence packages generate on demand.
 
-6. **Reports** — Monthly executive reports (AI-drafted, human-reviewed), incident reports, and evidence packages — all generated on the appliance.
+6. **Scores** — The Pono Score is a 100-point posture metric across six domains (detection, tuning, vulnerability, identity, response, human) that gives executives a single number and gives the operator a clear improvement path.
+
+7. **Tunes** — Bayesian alert rate modeling with Gamma conjugate priors, shrinkage, seasonality detection, and KL-divergence drift alerting. Ed25519-signed tuning proposals ensure integrity. A nightly batch service produces tuning recommendations that are cryptographically verifiable.
+
+8. **Reports** — Monthly executive reports (AI-drafted, human-reviewed), incident reports, and evidence packages — all generated on the appliance as PDFs.
+
+9. **Attests** — Signed posture export bundles for third-party verification. An external party can independently verify that a Kahu appliance reported a given posture score at a given time, without access to the appliance.
 
 ---
 
@@ -52,31 +58,44 @@ Kahu functions as their tier-1 SOC analyst in a box. It watches everything, surf
 |---|-----------|---------------|
 | 1 | **Data sovereignty** | All telemetry, logs, model inference, and analysis remain on the appliance. No cloud dependency for core function. The appliance operates fully when the WAN is down. |
 | 2 | **Fail closed** | If any component that enforces a data-handling boundary degrades, the system defaults to the restrictive behavior. There is no silent fallback that routes data somewhere it should not go. |
-| 3 | **Human in the loop** | The AI recommends, summarizes, and drafts. It does not autonomously remediate in v1. Every recommended action requires human approval. This is a marketed feature, not a limitation. |
-| 4 | **Evidence as byproduct** | Every operational action automatically generates compliance evidence. The customer's continuous monitoring evidence writes itself. |
+| 3 | **The model advises, the ruleset governs** | The LLM cannot override deterministic severity bounds. A critical alert stays critical regardless of what the model says. Auto-dismissal of high/critical alerts is architecturally forbidden — enforced at two independent points in the pipeline, not by prompting. |
+| 4 | **Human in the loop** | The AI recommends, summarizes, and drafts. It does not autonomously remediate. Every recommended action requires human approval. This is a marketed feature, not a limitation. |
+| 5 | **Evidence as byproduct** | Every operational action automatically generates compliance evidence. The customer's continuous monitoring evidence writes itself. |
 
 ---
 
 ## Architecture
 
 ```
-Layer 5 — Interfaces     Web UI (desktop + mobile PWA), Cloudflare Zero Trust portal,
+Layer 5 — Interfaces     React 19 PWA (desktop + mobile), Cloudflare Zero Trust portal,
                           operator plane (fleet management)
 
-Layer 4 — Kahu Core      Python/FastAPI orchestration: triage pipeline, investigation,
-                          reporting, compliance engine, connector framework
+Layer 4 — Kahu Core      Python 3.12 / FastAPI orchestration: triage pipeline, investigation,
+                          reporting, compliance engine, Pono scoring, attestation
                           Postgres (state) + Redis (queues)
 
 Layer 3 — Inference       Ollama serving quantized LLMs locally
                           Model-agnostic: swappable per tier, updated via subscription
 
-Layer 2 — SIEM/XDR       Wazuh manager + indexer (OpenSearch) + dashboard
+Layer 2 — SIEM/XDR       Wazuh 4.14.1 manager + indexer (OpenSearch) + dashboard
                           Agents on endpoints, syslog/NetFlow collectors
 
 Layer 1 — Platform        Hardened Linux, Docker Compose, full-disk encryption
 
 Layer 0 — Hardware        Tiered appliance chassis (S / M / V)
 ```
+
+### Software Packages (5 packages under `src/`)
+
+| Package | Purpose |
+|---------|---------|
+| **`kahu`** | Core FastAPI app — the main deliverable |
+| **`kahu_tuning`** | Bayesian alert rate modeling (Gamma priors, shrinkage, seasonality, KL-divergence drift). Ed25519-signed proposals. |
+| **`kahu_tuner`** | Nightly batch service that runs tuning against historical alert data |
+| **`kahu_pono`** | 100-point posture score across six security domains |
+| **`kahu_attest`** | Signed posture export bundles for third-party verification |
+
+Dependency direction is one-way: `kahu` imports the satellite packages; they never import `kahu`.
 
 ---
 
@@ -92,58 +111,72 @@ Layer 0 — Hardware        Tiered appliance chassis (S / M / V)
 
 ---
 
-## What's Built (July 2026)
+## What's Built (August 2026)
 
-The product is not a slide deck. Working code is deployed and running against live data.
+The product is not a slide deck. Working code is deployed and running against live infrastructure in a test environment.
 
-### Kahu Core — 5,840 lines of Python
+### Kahu Core — 15,700+ lines of Python (5 packages)
 
 | Component | Status | What It Does |
 |-----------|--------|-------------|
-| Triage Pipeline | **Live** | 4-stage: filter, enrich, LLM triage, disposition. Processes Wazuh alerts end-to-end. |
-| Auto-Disposition | **Live** | AI handles obvious alerts automatically; uncertain ones go to the human. |
-| Re-evaluation Loop | **Live** | Hourly re-check of acknowledged alerts. If new evidence changes the picture, the alert resurfaces. |
+| Triage Pipeline | **Live** | 5-stage: filter, enrich, LLM triage, auto-disposition, disposition. Processes Wazuh alerts end-to-end. |
+| Auto-Disposition Floor | **Live** | AI handles obvious alerts automatically; critical/high deterministic alerts are architecturally forbidden from auto-dismiss, routed to a human regardless of model confidence. |
+| Severity Bounding | **Live** | LLM cannot lower severity more than one band below deterministic assessment. Enforced independently of auto-disposition. |
+| Re-evaluation Loop | **Live** | Periodic re-check of acknowledged alerts. If new evidence changes the picture, the alert resurfaces. |
 | Swipe Feed API | **Live** | Mobile-first triage: left=acknowledge, right=confirm, up=escalate. 3 seconds per alert. |
 | Gamification (XP/Ranks) | **Live** | Points, streaks, badges, leaderboard. Turns alert triage from a chore into a game. |
 | Ticket System | **Live** | Auto-creates incident/investigation tickets on confirm/escalate with full lifecycle. |
-| Investigation Chat | **Live** | Natural-language queries translated to Wazuh indexer searches, results summarized by AI. |
+| Investigation Chat | **Live** | Natural-language queries translated to Wazuh indexer searches, results summarized by AI. Session history preserved. |
 | Connector Framework | **Live** | Wizard-driven source onboarding. Catalog: syslog (multi-vendor), SNMP, Wazuh agents, M365/Entra, Defender, Sentinel. |
-| Compliance Engine | **Live** | Framework profiles (CMMC, HIPAA, PCI DSS, CIS, SOC 2), gap analysis, evidence collection. |
-| Evidence Store | **Live** | Append-only, hash-chained, control-tagged. Assessor-ready export. |
+| Compliance Engine | **Live** | Framework profiles (CMMC, HIPAA, PCI DSS, CIS, SOC 2, NIST 800-171), gap analysis, evidence collection. |
+| Evidence Store | **Live** | Append-only, SHA-256 hash-chained, control-tagged. Assessor-ready export. Verifiable via `verify_chain()`. |
+| Pono Score | **Live** | 100-point composite posture score across 6 domains with configurable weights. |
+| Bayesian Tuning | **Live** | Gamma conjugate prior alert rate modeling with shrinkage, seasonality, and KL-divergence drift detection. Ed25519-signed tuning proposals. |
+| Attestation Bundles | **Live** | Signed posture exports for third-party verification. External parties can verify scores without appliance access. |
 | Vulnerability Scanning | **Live** | Greenbone/OpenVAS integration — create scans, view findings, generate reports. |
-| Reporting | **Live** | Executive briefings, incident reports, evidence packages. |
-| Redaction | **Live** | Pattern-based secret stripping before any data reaches the LLM. |
+| Reporting | **Live** | Executive briefings, incident reports, evidence packages — generated as PDFs on the appliance. |
+| Redaction | **Live** | Pattern-based secret stripping (passwords, API keys, AWS keys, private keys, emails) before any data reaches the LLM. |
+| Auth & RBAC | **Live** | JWT authentication, role-based access control, admin user management. |
+| Arsenal | **Live** | Curated response action catalog with unlock/audit controls. |
 
-### Frontend — 5,447 lines (JS + CSS + HTML)
+### Frontend — React 19 + TypeScript + Tailwind PWA
 
-| Feature | Status |
-|---------|--------|
-| Glance screen (alert orb) | **Live** |
-| Swipe feed (card triage) | **Live** |
-| Score/tickets/badges | **Live** |
-| Investigation chat | **Live** |
-| Profile (avatar, themes, rank) | **Live** |
-| Compliance dashboard | **Live** |
-| Vulnerability scanner UI | **Live** |
-| Source management + wizard | **Live** |
-| Alert history + runbooks | **Live** |
+| Page | Status |
+|------|--------|
+| Glance (alert orb + AI briefing) | **Live** |
+| Feed (swipe card triage) | **Live** |
+| Investigate (NL chat) | **Live** |
+| Score (Pono posture + tickets + badges) | **Live** |
+| Reports (executive, incident, evidence) | **Live** |
+| Compliance (frameworks, coverage, gaps) | **Live** |
+| Connectors (catalog + wizard) | **Live** |
+| Recon (vulnerability scanner) | **Live** |
+| Arsenal (response actions) | **Live** |
 | Settings (tolerance, auto-triage, services) | **Live** |
+| More (profile, themes, about) | **Live** |
+| Login / first-user setup | **Live** |
 | Desktop layout (sidebar nav) | **Live** |
-| Mobile PWA (installable) | **Live** |
+| Mobile PWA (installable, service worker) | **Live** |
 
-### Infrastructure
+### Infrastructure & Deployment
 
 | Component | Status |
 |-----------|--------|
 | Docker Compose (10 services) | **Live** |
+| Ubuntu installer (single-node + distributed 3+ node) | **Live** |
+| Remote-site probe installer | **Live** |
+| Distributed role split (core / siem / ai / scanner) | **Live** |
+| Join bundle for multi-node deployment | **Live** |
+| TLS certificate generation | **Live** |
 | Wazuh 4.14.1 (manager + indexer + dashboard) | **Live** |
-| Ollama (GPU-accelerated) | **Live** |
+| Ollama (GPU or CPU) | **Live** |
 | Greenbone/OpenVAS | **Live** |
-| PostgreSQL 16 | **Live** |
+| PostgreSQL 16 + Alembic migrations | **Live** |
 | Redis 7 | **Live** |
-| Alembic migrations | **Live** |
 | Cloudflare Tunnel (Zero Trust) | **Ready** — config built, `cloud` profile in compose |
 | Alert generator (demo/testing) | **Live** |
+| Wazuh agent installer (Windows PowerShell) | **Live** |
+| 320 automated tests | **Live** |
 
 ---
 
@@ -179,8 +212,9 @@ The product is not a slide deck. Working code is deployed and running against li
 4. Each gap links to a connector wizard that closes it ("attach firewall syslog to cover Requirement 10")
 5. Attaching the source visibly improves the compliance score
 6. Evidence generates automatically as the system operates
+7. Pono Score gives executives a single number; attestation bundles let them prove it to third parties
 
-This loop — select framework, see gaps, close them, watch coverage climb — is the product's core dopamine cycle and the thing no bare SIEM offers.
+This loop — select framework, see gaps, close them, watch coverage climb, prove it externally — is the product's core dopamine cycle and the thing no bare SIEM offers.
 
 ---
 
@@ -255,6 +289,7 @@ The AI layer is what makes the unit economics work. One operator can carry a fle
 2. **Compliance evidence as byproduct** — Detection and compliance in one box, not two vendors
 3. **Wizard-driven simplicity** — An office manager can attach sources; competitors require a security engineer
 4. **Data sovereignty as architecture** — Not a policy promise, an engineering constraint. There is no cloud fallback to accidentally enable.
+5. **Cryptographic verifiability** — Ed25519-signed tuning proposals and attestation bundles. Posture claims are independently verifiable, not just asserted.
 
 ---
 
@@ -263,10 +298,11 @@ The AI layer is what makes the unit economics work. One operator can carry a fle
 A compromised security appliance is worse than no appliance, and the irony would be fatal to the brand.
 
 - **Physical theft:** Full-disk encryption. No data recoverable from a powered-off stolen unit without keys.
-- **Prompt injection via log content:** Architectural containment — the model has no action-execution path to hijack. Log data is delimited and redacted. Treated as a permanent condition, not a solvable bug.
+- **Prompt injection via log content:** Architectural containment — the model advises, the ruleset governs. Two independent enforcement points (severity bounding and auto-dismiss floor) prevent a poisoned model output from silencing critical alerts. Treated as a permanent condition, not a solvable bug.
 - **Supply chain:** Signed update artifacts, SBOM per release, base images built from upstream by ComplyHI CI.
 - **ComplyHI as threat:** No standing remote access. Update signing keys offline. Health payload allowlist means a compromised operator plane cannot exfiltrate customer data.
 - **Self-monitoring:** The appliance runs its own Wazuh agent and monitors itself. The shield watches itself.
+- **Tuning integrity:** All tuning proposals are Ed25519-signed. A tampered proposal is rejected before it can affect alert thresholds.
 
 ---
 
@@ -275,6 +311,7 @@ A compromised security appliance is worse than no appliance, and the irony would
 | Layer | Technology | License |
 |-------|-----------|---------|
 | Core orchestration | Python 3.12 / FastAPI | Proprietary (ComplyHI) |
+| Tuning engine | SciPy + custom Bayesian modeling | Proprietary (ComplyHI) |
 | Database | PostgreSQL 16 | PostgreSQL License (permissive) |
 | Cache/queues | Redis 7 | BSD |
 | SIEM/XDR | Wazuh 4.14.1 | GPL v2 |
@@ -283,9 +320,8 @@ A compromised security appliance is worse than no appliance, and the irony would
 | Vulnerability scanning | Greenbone/OpenVAS | GPL v2 |
 | Containerization | Docker Compose | Apache 2.0 |
 | Remote access | Cloudflare Tunnel + Access | Cloudflare (SaaS) |
-| Frontend | Vanilla JS/CSS PWA | Proprietary (ComplyHI) |
-
-**No framework debt.** The frontend is vanilla JS — no React, no build step, no npm dependency chain. The backend is FastAPI with standard Python libraries. Deployment is Docker Compose. The entire stack can be understood by one engineer.
+| Frontend | React 19 + TypeScript + Vite + Tailwind | Proprietary (ComplyHI) |
+| Cryptography | Ed25519 (signing), SHA-256 (evidence chain) | Standard |
 
 ---
 
@@ -311,12 +347,12 @@ Everything described above. Detection and advise-only. ISE as customer zero, plu
 - Expanded cloud source connectors (Google Workspace, AWS CloudTrail)
 - Kahu V tier packaging and pricing
 - MSP/MSSP partner program design
+- Multi-site aggregation for customers with branches
 
 ### v2 — Autonomy (Gated)
 
 - **Active response** — Pre-approved playbooks the customer authorizes in advance (e.g., isolate host on confirmed ransomware). Still not free-form model-driven action.
 - **Fine-tuned triage model** — Trained on accumulated, customer-consented, anonymized disposition data. Consent architecture designed before v1 ships.
-- **Multi-site aggregation** — For customers with branches (Guam/Japan pattern)
 - **Connector SDK** — Open the manifest format for third-party or customer-authored connectors
 
 ---
@@ -333,13 +369,18 @@ Everything described above. Detection and advise-only. ISE as customer zero, plu
 
 | Metric | Value |
 |--------|-------|
-| Lines of proprietary code | ~11,300 (Python + JS/CSS/HTML) |
-| API endpoints | 65+ |
-| Docker services | 10 (core, postgres, redis, ollama, wazuh-manager, wazuh-indexer, wazuh-dashboard, greenbone, cloudflared, generator) |
+| Lines of proprietary code | ~19,400 (Python backend + React frontend) |
+| Backend Python (5 packages) | 15,700+ lines |
+| Frontend (React 19 + TypeScript) | 2,200+ lines |
+| Test suite | 320 tests, 4,000+ lines |
+| Demo traffic generator | 1,500+ lines |
+| API endpoints | 90+ |
+| Docker services | 10 |
 | Compliance frameworks supported | 7 |
 | Connector types in catalog | 10+ |
-| UI screens | 10 (glance, feed, score, ask, profile, comply, vulns, sources, history, settings) |
-| Time from zero to working product | Solo build, ~6 months |
+| UI pages | 12 |
+| Installer modes | 3 (single-node, distributed, remote probe) |
+| Time from zero to working product | Solo build, ~7 months |
 
 ---
 
