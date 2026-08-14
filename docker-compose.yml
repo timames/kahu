@@ -122,8 +122,8 @@ services:
         hard: 65536
     volumes:
       - wazuh-indexer-data:/var/lib/wazuh-indexer
-      - indexer-certs:/usr/share/wazuh-indexer/certs:ro
-      - ./config/wazuh/opensearch.yml:/usr/share/wazuh-indexer/opensearch.yml:ro
+      - indexer-certs:/usr/share/wazuh-indexer/config/certs:ro
+      - ./config/wazuh/opensearch.yml:/usr/share/wazuh-indexer/config/opensearch.yml:ro
     depends_on:
       wazuh-indexer-certs-init:
         condition: service_completed_successfully

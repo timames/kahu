@@ -276,7 +276,13 @@ apply_tuning() {
 # Secrets and .env
 # ─────────────────────────────────────────────────────────────────────────────
 gen_secret() { openssl rand -hex 32; }
-gen_password() { openssl rand -base64 24 | tr -d '/+=' | cut -c1-24; }
+gen_password() {
+    # Wazuh 4.14+ enforces complexity: upper, lower, digit, and special character.
+    # Generate a base from random bytes, then guarantee one of each class.
+    local base
+    base="$(openssl rand -base64 30 | tr -d '/+=' | cut -c1-20)"
+    printf 'K!9z%s' "$base" | cut -c1-24
+}
 
 # Read an existing value from .env so re-running the installer is not destructive.
 existing() {  # existing <KEY>

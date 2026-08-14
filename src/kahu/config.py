@@ -21,7 +21,9 @@ def _default_config_dir() -> Path:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     # JSON config directory. Same env var name kahu_tuner already uses, so a
     # deployment configures both services with one setting.
