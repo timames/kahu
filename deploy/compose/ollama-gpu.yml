@@ -1,0 +1,19 @@
+# NVIDIA GPU for Ollama.
+#
+# Overlay, not baked into the base file: a device reservation the host cannot
+# satisfy makes `docker compose up` fail with "could not select device driver
+# nvidia with capabilities: [[gpu]]", which would break every CPU-only install.
+#
+#   docker compose -f docker-compose.yml -f deploy/compose/ollama-gpu.yml up -d
+#
+# Requires the NVIDIA container toolkit on the host; deploy/install.sh installs
+# it when it adds this overlay.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

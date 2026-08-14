@@ -1,0 +1,51 @@
+#cloud-config
+# Kahu remote-site probe — cloud-init bootstrap
+#
+# Paste into:
+#   Azure    VM creation > Advanced > Custom data
+#   AWS      EC2 launch  > Advanced details > User data
+#   VMware   vApp properties / guestinfo.userdata (base64), or Ubuntu autoinstall
+#   Proxmox  qm set <vmid> --cicustom "user=local:snippets/probe-cloud-init.yaml"
+#
+# EDIT THE THREE VALUES UNDER `environment:` BEFORE USE.
+#
+# The VM is deliberately small: rsyslog plus the Wazuh agent, no Docker. 2 vCPU
+# and 2 GB RAM handles a typical branch office; give it more disk if you raise
+# --spool-mb for long WAN outages.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - git
+  - curl
+  - ca-certificates
+
+write_files:
+  - path: /etc/kahu-probe/probe.env
+    permissions: '0600'
+    owner: root:root
+    content: |
+      # Wazuh manager: the siem node, or the all-in-one appliance.
+      KAHU_MANAGER=CHANGEME.example.com
+      # Site label; becomes the agent name kahu-probe-<SITE>.
+      KAHU_SITE=CHANGEME
+      # Network permitted to send syslog to this probe. Leave blank to
+      # auto-detect the VM's own subnet.
+      KAHU_ALLOW_CIDR=
+      # Manager enrolment password, if authd requires one.
+      KAHU_ENROLLMENT_PASSWORD=
+
+runcmd:
+  - set -eux
+  - . /etc/kahu-probe/probe.env
+  - git clone --depth 1 https://github.com/timames/kahu.git /opt/kahu
+  - |
+    ARGS="--manager ${KAHU_MANAGER} --site ${KAHU_SITE} --yes"
+    [ -n "${KAHU_ALLOW_CIDR}" ] && ARGS="${ARGS} --allow-cidr ${KAHU_ALLOW_CIDR}"
+    [ -n "${KAHU_ENROLLMENT_PASSWORD}" ] && ARGS="${ARGS} --enrollment-password ${KAHU_ENROLLMENT_PASSWORD}"
+    # shellcheck disable=SC2086
+    bash /opt/kahu/deploy/install-probe.sh ${ARGS}
+  - shred -u /etc/kahu-probe/probe.env || rm -f /etc/kahu-probe/probe.env
+
+final_message: "Kahu probe ready after $UPTIME seconds. Point device syslog at this host on port 514."

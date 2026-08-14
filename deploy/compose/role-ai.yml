@@ -1,0 +1,28 @@
+# Role: ai — Ollama only.
+#
+# Standalone, not an overlay of docker-compose.yml: compose merges depends_on
+# rather than removing entries, so overlaying the base file would still drag in
+# postgres, redis and the Wazuh stack on this box.
+#
+#   docker compose --env-file .env -f deploy/compose/role-ai.yml up -d
+#   # add -f deploy/compose/ollama-gpu.yml on an NVIDIA host
+#
+# Publishes 11434 to the LAN so the core node can reach it. Ollama has no
+# authentication, so restrict this port to the core node at the firewall.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_BIND:-0.0.0.0}:11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  ollama-data:

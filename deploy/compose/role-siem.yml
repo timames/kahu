@@ -1,69 +1,26 @@
+# Role: siem - Wazuh manager, indexer and dashboard.
+#
+#   docker compose --env-file .env -f deploy/compose/role-siem.yml up -d
+#
+# The three Wazuh services stay together deliberately. They talk to each other
+# constantly over TLS using the compose service names in their certificate SANs,
+# so splitting them would mean reissuing certs for real hostnames. Keeping them
+# on one box also puts the JVM heap and the indices on the same machine, which is
+# what the "RAM-hungry" role is for.
+#
+# Unlike the all-in-one file this publishes 55000 (the Wazuh API), because the
+# core node now reaches it across the network rather than over a compose bridge.
 services:
-  core:
-    build: .
-    ports:
-      - "8000:8000"
-    env_file: .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      ollama:
-        condition: service_healthy
-    volumes:
-      - evidence-store:/data/evidence
-      - ./.env:/app/.env
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-kahu}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — deploy/install.sh generates one}
-      POSTGRES_DB: ${POSTGRES_DB:-kahu}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kahu"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-    # GPU is opt-in. An unconditional nvidia reservation makes `compose up` fail
-    # outright on a host with no NVIDIA card, so it lives in an overlay:
-    #   -f deploy/compose/ollama-gpu.yml
-    # deploy/install.sh adds that automatically when it detects a GPU.
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 60s
-
   wazuh-manager:
     image: wazuh/wazuh-manager:4.14.1
     hostname: wazuh-manager
+    restart: unless-stopped
     ports:
-      - "1514:1514"
-      - "1515:1515"
-      # Wazuh API (55000) not exposed to host — Windows excludes this port range.
-      # Core container reaches it via Docker network at wazuh-manager:55000.
+      - "1514:1514"                                  # agent events
+      - "1515:1515"                                  # agent enrolment
+      - "${SIEM_BIND:-0.0.0.0}:55000:55000"          # API, consumed by the core node
+      - "${SYSLOG_BIND:-0.0.0.0}:514:514/udp"        # remote-site probes
+      - "${SYSLOG_BIND:-0.0.0.0}:514:514/tcp"
     environment:
       INDEXER_URL: https://wazuh-indexer:9200
       INDEXER_USERNAME: ${WAZUH_INDEXER_USER:-admin}
@@ -106,10 +63,10 @@ services:
   wazuh-indexer:
     image: wazuh/wazuh-indexer:4.14.1
     hostname: wazuh-indexer
+    restart: unless-stopped
     ports:
-      - "9200:9200"
+      - "${SIEM_BIND:-0.0.0.0}:9200:9200"
     environment:
-      # Sized from host RAM by deploy/install.sh; 1g is the safe fallback.
       OPENSEARCH_JAVA_OPTS: "-Xms${INDEXER_HEAP:-1g} -Xmx${INDEXER_HEAP:-1g}"
       bootstrap.memory_lock: "true"
       discovery.type: single-node
@@ -137,6 +94,7 @@ services:
   wazuh-dashboard:
     image: wazuh/wazuh-dashboard:4.14.1
     hostname: wazuh-dashboard
+    restart: unless-stopped
     ports:
       - "443:5601"
     environment:
@@ -167,64 +125,7 @@ services:
       wazuh-manager:
         condition: service_healthy
 
-  greenbone:
-    image: immauss/openvas:latest
-    hostname: greenbone
-    ports:
-      - "9392:9392"
-    volumes:
-      - greenbone-data:/data
-    environment:
-      USERNAME: ${GREENBONE_USER:-admin}
-      PASSWORD: ${GREENBONE_PASSWORD:-admin}
-      RELAYHOST: smtp
-      SMTPPORT: "25"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9392/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 20
-      start_period: 300s
-
-  generator:
-    build: ./generator
-    container_name: kahu-generator
-    restart: unless-stopped
-    environment:
-      TARGET_HOST: wazuh-manager
-      SYSLOG_PORT: "514"
-      SYSLOG_PROTO: tcp
-      DRY_RUN: "false"
-      AUTOSTART: "true"
-      INTENSITY: "1.0"
-      TIMEZONE: Pacific/Honolulu
-      API_TOKEN: demo-local-token
-      KAHU_HOST: core:8000
-    ports:
-      - "8080:8080"
-    depends_on:
-      wazuh-manager:
-        condition: service_healthy
-
-  # Cloudflare Tunnel — secure remote access (paid tiers)
-  # To enable: set TUNNEL_TOKEN in .env, then start this service
-  # Setup: cloudflared tunnel login && cloudflared tunnel create kahu
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    command: tunnel run
-    environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
-    restart: unless-stopped
-    depends_on:
-      core:
-        condition: service_started
-    profiles:
-      - cloud
-
 volumes:
-  pgdata:
-  evidence-store:
-  ollama-data:
   indexer-certs:
   wazuh-api-config:
   wazuh-etc:
@@ -239,5 +140,4 @@ volumes:
   filebeat-var:
   wazuh-indexer-data:
   wazuh-dashboard-config:
-  greenbone-data:
   wazuh-dashboard-custom:

@@ -14,6 +14,13 @@ mkdir -p "$CERT_DIR"
 DAYS=3650
 SUBJ_BASE="/C=US/ST=Hawaii/O=ComplyHI/OU=Kahu"
 
+# Extra SANs for a distributed install, where the indexer and manager are
+# reached by real hostname or IP from another box rather than by their compose
+# service name. Comma-separated, already in openssl form, with a leading comma:
+#   KAHU_EXTRA_SAN=",DNS:siem.example.com,IP:10.0.0.20"
+# deploy/install.sh sets this. Empty for an all-in-one install.
+EXTRA_SAN="${KAHU_EXTRA_SAN:-}"
+
 echo "==> Generating root CA..."
 openssl genrsa -out "$CERT_DIR/root-ca-key.pem" 2048
 openssl req -new -x509 -sha256 -key "$CERT_DIR/root-ca-key.pem" \
@@ -50,13 +57,13 @@ EOF
 }
 
 # Indexer
-generate_cert "indexer" "wazuh-indexer" "DNS:wazuh-indexer,DNS:localhost,IP:127.0.0.1"
+generate_cert "indexer" "wazuh-indexer" "DNS:wazuh-indexer,DNS:localhost,IP:127.0.0.1${EXTRA_SAN}"
 
 # Manager (filebeat certs)
-generate_cert "filebeat" "wazuh-manager" "DNS:wazuh-manager,DNS:localhost,IP:127.0.0.1"
+generate_cert "filebeat" "wazuh-manager" "DNS:wazuh-manager,DNS:localhost,IP:127.0.0.1${EXTRA_SAN}"
 
 # Dashboard
-generate_cert "dashboard" "wazuh-dashboard" "DNS:wazuh-dashboard,DNS:localhost,IP:127.0.0.1"
+generate_cert "dashboard" "wazuh-dashboard" "DNS:wazuh-dashboard,DNS:localhost,IP:127.0.0.1${EXTRA_SAN}"
 
 # Admin cert (for security plugin initialization)
 generate_cert "admin" "admin" "DNS:localhost,IP:127.0.0.1"

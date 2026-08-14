@@ -1,0 +1,29 @@
+# Role: scanner — Greenbone / OpenVAS only.
+#
+#   docker compose --env-file .env -f deploy/compose/role-scanner.yml up -d
+#
+# The vulnerability feed sync on first start runs for hours and is CPU- and
+# disk-bound; that is the reason this role gets its own box when one is spare.
+services:
+  greenbone:
+    image: immauss/openvas:latest
+    hostname: greenbone
+    restart: unless-stopped
+    ports:
+      - "${GREENBONE_BIND:-0.0.0.0}:9392:9392"
+    volumes:
+      - greenbone-data:/data
+    environment:
+      USERNAME: ${GREENBONE_USER:-admin}
+      PASSWORD: ${GREENBONE_PASSWORD:-admin}
+      RELAYHOST: smtp
+      SMTPPORT: "25"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9392/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
+
+volumes:
+  greenbone-data:

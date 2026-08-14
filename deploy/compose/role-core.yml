@@ -1,0 +1,58 @@
+# Role: core - Kahu API, Postgres, Redis.
+#
+#   docker compose --env-file .env -f deploy/compose/role-core.yml up -d
+#
+# Postgres and Redis stay on the compose-internal network and are NOT published;
+# only this node talks to them. The API is published on 8000.
+#
+# Wazuh, Ollama and Greenbone live on other boxes - .env points at them by
+# address (WAZUH_API_URL, OLLAMA_BASE_URL, GREENBONE_URL), so there is no
+# depends_on for them here. The API tolerates any of them being down: Ollama
+# unreachable degrades triage to deterministic-only rather than failing.
+services:
+  core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${CORE_BIND:-0.0.0.0}:8000:8000"
+    env_file: ./.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - evidence-store:/data/evidence
+      - ./.env:/app/.env
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kahu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-kahu}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kahu}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:
+  evidence-store:
