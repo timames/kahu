@@ -24,25 +24,25 @@ logger = logging.getLogger(__name__)
 
 # Control tags for triage evidence — maps to NIST 800-171 / CMMC / HIPAA
 ALERT_RAISED_CONTROLS = [
-    "800-171:3.3.1",   # Create and retain audit records
-    "800-171:3.3.2",   # Ensure actions are traceable
+    "800-171:3.3.1",  # Create and retain audit records
+    "800-171:3.3.2",  # Ensure actions are traceable
     "800-171:3.14.6",  # Monitor the system
     "800-171:3.14.7",  # Identify unauthorized use
     "HIPAA:164.312(b)",  # Audit controls
-    "CIS:8.2",         # Collect audit logs
-    "CIS:8.5",         # Collect detailed audit logs
-    "SOC2:CC2.1",      # Generated info for system controls
-    "SOC2:CC7.1",      # Detection and monitoring
-    "SOC2:CC7.2",      # Monitor for anomalies
+    "CIS:8.2",  # Collect audit logs
+    "CIS:8.5",  # Collect detailed audit logs
+    "SOC2:CC2.1",  # Generated info for system controls
+    "SOC2:CC7.1",  # Detection and monitoring
+    "SOC2:CC7.2",  # Monitor for anomalies
 ]
 
 ALERT_DISPOSITIONED_CONTROLS = [
-    "800-171:3.6.1",   # Incident handling
-    "800-171:3.6.2",   # Track/document/report incidents
+    "800-171:3.6.1",  # Incident handling
+    "800-171:3.6.2",  # Track/document/report incidents
     "HIPAA:164.308(a)(6)(ii)",  # Response and reporting
-    "CIS:17.4",        # Establish incident handling process
-    "SOC2:CC7.3",      # Evaluate security events
-    "SOC2:CC7.4",      # Respond to identified incidents
+    "CIS:17.4",  # Establish incident handling process
+    "SOC2:CC7.3",  # Evaluate security events
+    "SOC2:CC7.4",  # Respond to identified incidents
 ]
 
 
@@ -85,7 +85,9 @@ async def persist_alert(
             "rule_description": alert.rule_description,
             "severity": alert.severity.value,
             "agent_name": alert.agent_name,
-            "llm_degraded": result.llm_output.get("degraded", False) if result.llm_output else False,
+            "llm_degraded": result.llm_output.get("degraded", False)
+            if result.llm_output
+            else False,
         },
         actor="system:triage_pipeline",
     )
@@ -93,7 +95,10 @@ async def persist_alert(
     await session.commit()
     logger.info(
         "Alert persisted: %s [%s] severity=%s agent=%s",
-        alert.id, alert.rule_id, alert.severity.value, alert.agent_name,
+        alert.id,
+        alert.rule_id,
+        alert.severity.value,
+        alert.agent_name,
     )
     return alert
 
@@ -132,8 +137,9 @@ async def record_disposition(
 
     await session.commit()
     logger.info(
-        "Alert %s dispositioned as %s by %s", alert_id, verdict.value, analyst,
+        "Alert %s dispositioned as %s by %s",
+        alert_id,
+        verdict.value,
+        analyst,
     )
     return disposition
-
-

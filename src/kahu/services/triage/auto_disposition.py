@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
 from kahu.models.tickets import Ticket, TicketStatus, TicketType
-from kahu.models.xp import XpEvent
 from kahu.services.compliance.evidence import record_evidence
 from kahu.services.triage.disposition import record_disposition
 from kahu.services.triage.llm_triage import canonical_verdict
@@ -33,9 +32,9 @@ AI_ANALYST = "kahu-ai"
 # Thresholds: (dismiss_confidence, confirm_confidence)
 # None means never auto-act
 TOLERANCE_THRESHOLDS: dict[int, tuple[float, float | None]] = {
-    1: (0.95, None),       # Conservative: very high bar to dismiss, never auto-confirm
-    2: (0.80, 0.90),       # Balanced
-    3: (0.60, 0.75),       # Aggressive
+    1: (0.95, None),  # Conservative: very high bar to dismiss, never auto-confirm
+    2: (0.80, 0.90),  # Balanced
+    3: (0.60, 0.75),  # Aggressive
 }
 
 TOLERANCE_LABELS: dict[int, str] = {1: "Conservative", 2: "Balanced", 3: "Aggressive"}
@@ -43,11 +42,11 @@ TOLERANCE_LABELS: dict[int, str] = {1: "Conservative", 2: "Balanced", 3: "Aggres
 # A tolerance change moves the global auto-dismiss posture for the whole
 # appliance, so it is change-management evidence, not just a setting.
 TOLERANCE_CHANGE_CONTROLS = [
-    "800-171:3.4.1",   # Baseline configuration
-    "800-171:3.4.2",   # Change control for configuration settings
-    "800-171:3.3.1",   # Create and retain audit records
-    "CIS:4.2",         # Establish and maintain a secure configuration process
-    "SOC2:CC8.1",      # Change management
+    "800-171:3.4.1",  # Baseline configuration
+    "800-171:3.4.2",  # Change control for configuration settings
+    "800-171:3.3.1",  # Create and retain audit records
+    "CIS:4.2",  # Establish and maintain a secure configuration process
+    "SOC2:CC8.1",  # Change management
 ]
 
 # --- Deterministic floor on auto-dismissal ---------------------------------
@@ -81,6 +80,7 @@ def auto_dismiss_forbidden(
     if critical_rule:
         return True
     return (deterministic_severity or "").strip().lower() in NON_DISMISSIBLE_SEVERITIES
+
 
 # Runtime tolerance — set via API, defaults to balanced
 _current_tolerance: int = 2
@@ -132,7 +132,10 @@ async def set_tolerance_audited(
     await session.commit()
     logger.info(
         "Auto-dispose tolerance set to %s (%s) by %s [was %s]",
-        new_level, TOLERANCE_LABELS.get(new_level), actor, old_level,
+        new_level,
+        TOLERANCE_LABELS.get(new_level),
+        actor,
+        old_level,
     )
     return new_level
 
@@ -210,7 +213,9 @@ async def maybe_auto_dispose(
             logger.info(
                 "Auto-dismiss refused by deterministic floor for alert %s "
                 "(deterministic_severity=%s critical_rule=%s)",
-                alert.id, deterministic_severity, critical_rule,
+                alert.id,
+                deterministic_severity,
+                critical_rule,
             )
             return AutoDispositionResult(floor_blocked_dismiss=True)
         # Compute dismiss confidence by combining available signals
@@ -232,7 +237,10 @@ async def maybe_auto_dispose(
                 alert_id=alert.id,
                 verdict=DispositionVerdict.ACKNOWLEDGED,
                 analyst=AI_ANALYST,
-                notes=f"Auto-acknowledged by AI (confidence: {dismiss_conf:.0%}, tolerance: {tolerance})",
+                notes=(
+                    f"Auto-acknowledged by AI"
+                    f" (confidence: {dismiss_conf:.0%}, tolerance: {tolerance})"
+                ),
                 session=session,
             )
             logger.info("Auto-acknowledged alert %s (confidence=%.2f)", alert.id, dismiss_conf)
@@ -243,7 +251,11 @@ async def maybe_auto_dispose(
             )
 
     # Check for auto-confirm (true positive)
-    if confirm_threshold is not None and ai_verdict == "true_positive" and confidence >= confirm_threshold:
+    if (
+        confirm_threshold is not None
+        and ai_verdict == "true_positive"
+        and confidence >= confirm_threshold
+    ):
         await record_disposition(
             alert_id=alert.id,
             verdict=DispositionVerdict.TRUE_POSITIVE,
@@ -264,7 +276,9 @@ async def maybe_auto_dispose(
         session.add(ticket)
 
         await session.commit()
-        logger.info("Auto-confirmed alert %s → ticket created (confidence=%.2f)", alert.id, confidence)
+        logger.info(
+            "Auto-confirmed alert %s → ticket created (confidence=%.2f)", alert.id, confidence
+        )
         return AutoDispositionResult(
             auto_handled=True,
             verdict="true_positive",
@@ -295,14 +309,12 @@ def _infer_verdict(
     to re-apply it here.
     """
     # Disposition history — strongest signal
-    if rule_fp_rate is not None and rule_fp_rate >= 0.6:
+    if rule_fp_rate is not None and rule_fp_rate >= 0.6 and (confidence < 0.85 or len(benign) >= 1):
         # 60%+ FP rate: dismiss unless LLM is highly confident it's real
-        if confidence < 0.85 or len(benign) >= 1:
-            return "acknowledged"
-    if rule_fp_rate is not None and rule_fp_rate >= 0.5:
+        return "acknowledged"
+    if rule_fp_rate is not None and rule_fp_rate >= 0.5 and (len(benign) >= 1 or confidence <= 0.7):
         # 50%+ FP rate with any benign explanation or moderate confidence
-        if len(benign) >= 1 or confidence <= 0.7:
-            return "acknowledged"
+        return "acknowledged"
 
     # Strong false positive signals (original logic)
     if len(benign) >= 2 and confidence <= 0.5:
@@ -350,10 +362,14 @@ async def _get_rule_fp_rate(rule_id: str, session: AsyncSession) -> float | None
             .select_from(Alert)
             .join(AlertDisposition, AlertDisposition.alert_id == Alert.id)
             .where(Alert.rule_id == rule_id)
-            .where(AlertDisposition.verdict.in_([
-                DispositionVerdict.ACKNOWLEDGED,
-                DispositionVerdict.FALSE_POSITIVE,
-            ]))
+            .where(
+                AlertDisposition.verdict.in_(
+                    [
+                        DispositionVerdict.ACKNOWLEDGED,
+                        DispositionVerdict.FALSE_POSITIVE,
+                    ]
+                )
+            )
         )
         fp_count = await session.scalar(fp_stmt) or 0
 

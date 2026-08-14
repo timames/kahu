@@ -40,20 +40,20 @@ class Settings(BaseSettings):
     # Wazuh
     wazuh_api_url: str = "https://localhost:55000"
     wazuh_api_user: str = "wazuh-wui"
-    wazuh_api_password: str = "changeme"
+    wazuh_api_password: str = "changeme"  # noqa: S105
     wazuh_indexer_url: str = "https://localhost:9200"
     wazuh_indexer_user: str = "admin"
-    wazuh_indexer_password: str = "changeme"
+    wazuh_indexer_password: str = "changeme"  # noqa: S105
 
     # Greenbone (Vulnerability Scanner)
     greenbone_url: str = "http://localhost:9392"
     greenbone_user: str = "admin"
-    greenbone_password: str = "admin"
+    greenbone_password: str = "admin"  # noqa: S105
 
     # Core
     log_level: str = "INFO"
     appliance_id: str = ""
-    secret_key: str = "changeme-generate-a-real-key"
+    secret_key: str = "changeme-generate-a-real-key"  # noqa: S105
     debug: bool = False
 
     # Agent deployment — the external IP/hostname agents should connect to

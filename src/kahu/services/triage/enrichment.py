@@ -11,7 +11,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,9 +53,7 @@ async def enrich_alert_group(
         sources.append("asset_context")
 
     # --- Related events from Wazuh indexer ---
-    related_events = await _fetch_related_events(
-        agent_name, timestamp_str, indexer
-    )
+    related_events = await _fetch_related_events(agent_name, timestamp_str, indexer)
     if related_events:
         sources.append("related_events")
 
@@ -131,7 +129,7 @@ async def _fetch_related_events(
     try:
         ts = _parse_wazuh_timestamp(timestamp_str)
     except (ValueError, TypeError):
-        ts = datetime.now(tz=timezone.utc)
+        ts = datetime.now(tz=UTC)
 
     window_start = ts - timedelta(minutes=RELATED_EVENT_WINDOW_MINUTES)
     window_end = ts + timedelta(minutes=5)
@@ -156,8 +154,13 @@ async def _fetch_related_events(
             }
         },
         "_source": [
-            "timestamp", "rule.id", "rule.level", "rule.description",
-            "rule.groups", "data", "location",
+            "timestamp",
+            "rule.id",
+            "rule.level",
+            "rule.description",
+            "rule.groups",
+            "data",
+            "location",
         ],
     }
 
@@ -182,15 +185,9 @@ async def _fetch_vuln_state(
         "size": 0,
         "query": {"match": {"agent.name": agent_name}},
         "aggs": {
-            "by_severity": {
-                "terms": {"field": "data.vulnerability.severity", "size": 5}
-            },
+            "by_severity": {"terms": {"field": "data.vulnerability.severity", "size": 5}},
             "critical_cves": {
-                "filter": {
-                    "terms": {
-                        "data.vulnerability.severity": ["Critical", "High"]
-                    }
-                },
+                "filter": {"terms": {"data.vulnerability.severity": ["Critical", "High"]}},
                 "aggs": {
                     "cves": {
                         "terms": {
@@ -207,9 +204,7 @@ async def _fetch_vuln_state(
         result = await indexer.search(index="wazuh-states-vulnerabilities-*", query=query)
         aggs = result.get("aggregations", {})
         severity_buckets = aggs.get("by_severity", {}).get("buckets", [])
-        critical_cves = (
-            aggs.get("critical_cves", {}).get("cves", {}).get("buckets", [])
-        )
+        critical_cves = aggs.get("critical_cves", {}).get("cves", {}).get("buckets", [])
 
         return {
             "severity_counts": {b["key"]: b["doc_count"] for b in severity_buckets},
@@ -249,7 +244,7 @@ async def _fetch_historical_dispositions(
         # Aggregate verdict counts
         verdict_counts: dict[str, int] = {}
         analyst_counts: dict[str, int] = {}
-        for alert_row, disp_row in rows:
+        for _alert_row, disp_row in rows:
             v = disp_row.verdict.value
             verdict_counts[v] = verdict_counts.get(v, 0) + 1
             a = disp_row.analyst
@@ -316,7 +311,11 @@ async def _fetch_agent_history(
         for alert_row, disp_row in rows:
             v = disp_row.verdict.value
             verdict_counts[v] = verdict_counts.get(v, 0) + 1
-            s = alert_row.severity.value if isinstance(alert_row.severity, Severity) else alert_row.severity
+            s = (
+                alert_row.severity.value
+                if isinstance(alert_row.severity, Severity)
+                else alert_row.severity
+            )
             severity_counts[s] = severity_counts.get(s, 0) + 1
 
         total = len(rows)

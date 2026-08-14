@@ -17,15 +17,15 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
-    session: AsyncSession = Depends(get_session),
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> User:
     if creds is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     try:
         payload = decode_token(creds.credentials)
-    except jwt.PyJWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token") from exc
 
     if payload.get("type") != "access":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token type")
@@ -39,7 +39,7 @@ async def get_current_user(
 def require_role(*roles: str):
     """Dependency factory — restrict endpoint to specific roles."""
 
-    async def _check(user: User = Depends(get_current_user)) -> User:
+    async def _check(user: User = Depends(get_current_user)) -> User:  # noqa: B008
         if user.role not in roles:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
         return user

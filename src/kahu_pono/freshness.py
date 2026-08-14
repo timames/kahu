@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def freshness_factor(
@@ -25,7 +24,7 @@ def freshness_factor(
     """
     if evidence_age_days <= 0:
         return 1.0
-    return delta ** evidence_age_days
+    return delta**evidence_age_days
 
 
 def evidence_age_days(
@@ -36,13 +35,13 @@ def evidence_age_days(
     if evidence_timestamp is None:
         return float("inf")
     if now is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
     if isinstance(evidence_timestamp, str):
         evidence_timestamp = datetime.fromisoformat(evidence_timestamp)
     if evidence_timestamp.tzinfo is None:
-        evidence_timestamp = evidence_timestamp.replace(tzinfo=timezone.utc)
+        evidence_timestamp = evidence_timestamp.replace(tzinfo=UTC)
     if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
+        now = now.replace(tzinfo=UTC)
     delta = now - evidence_timestamp
     return max(0.0, delta.total_seconds() / 86400.0)
 

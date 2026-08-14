@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from kahu_tuning.config import TuningConfig
 from kahu_tuning.models import TupleState
@@ -25,11 +25,15 @@ def apply_decay(
     """
     cfg = config or TuningConfig()
     if today is None:
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
 
     # Idempotent: skip if already decayed today
     if state.last_decay_ts is not None:
-        last_date = state.last_decay_ts.date() if isinstance(state.last_decay_ts, datetime) else state.last_decay_ts
+        last_date = (
+            state.last_decay_ts.date()
+            if isinstance(state.last_decay_ts, datetime)
+            else state.last_decay_ts
+        )
         if last_date >= today:
             return state
 
@@ -51,7 +55,7 @@ def apply_decay(
         w_90d=w_90d,
         golden_alpha=state.golden_alpha,  # Never decayed
         golden_beta=state.golden_beta,
-        last_decay_ts=datetime(today.year, today.month, today.day, tzinfo=timezone.utc),
+        last_decay_ts=datetime(today.year, today.month, today.day, tzinfo=UTC),
         last_update_ts=state.last_update_ts,
     )
 

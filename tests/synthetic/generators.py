@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import random
-from datetime import datetime, timezone
 
 from kahu_tuning.models import FleetPrior, SeasonalityProfile, TupleState, WindowState
 
@@ -16,7 +15,7 @@ def make_tuple_state(
     beta: float = 0.5,
 ) -> TupleState:
     """Create a fresh TupleState with uniform priors."""
-    w = WindowState(alpha=alpha, beta=beta)
+    WindowState(alpha=alpha, beta=beta)
     return TupleState(
         rule_id=rule_id,
         source_key=source_key,
@@ -45,13 +44,13 @@ def generate_poisson_events(
     Returns:
         List of event counts, one per hour.
     """
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311
     counts = []
     for _ in range(hours):
         # Poisson via inverse CDF
         n = 0
         p = 1.0
-        l = rng.random()
+        rng.random()
         import math
         threshold = math.exp(-rate)
         while p > threshold:
@@ -72,7 +71,7 @@ def generate_ramping_events(
     Returns:
         List of (day_index, event_count_for_day) tuples.
     """
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311
     import math
     result = []
     for d in range(days):

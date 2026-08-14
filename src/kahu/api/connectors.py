@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.clients.wazuh import WazuhAPIClient, WazuhIndexerClient
@@ -81,7 +82,7 @@ async def catalog():
 
 
 @router.get("/sources", response_model=list[ConnectorOut])
-async def list_sources(session: AsyncSession = Depends(get_session)):
+async def list_sources(session: AsyncSession = Depends(get_session)):  # noqa: B008
     """List all configured connector instances plus live Wazuh sources."""
     result = await session.execute(
         select(ConnectorInstance).order_by(ConnectorInstance.created_at.desc())
@@ -96,7 +97,7 @@ async def list_sources(session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/overview", response_model=SourcesOverview)
-async def sources_overview(session: AsyncSession = Depends(get_session)):
+async def sources_overview(session: AsyncSession = Depends(get_session)):  # noqa: B008
     """Summary stats for the sources screen."""
     result = await session.execute(select(ConnectorInstance))
     instances = result.scalars().all()
@@ -127,7 +128,9 @@ async def sources_overview(session: AsyncSession = Depends(get_session)):
         cat_counts[cat]["events_today"] += c.events_today
 
     if wazuh_sources:
-        wazuh_cat = cat_counts.get("siem", {"id": "siem", "sources": 0, "active": 0, "events_today": 0})
+        wazuh_cat = cat_counts.get(
+            "siem", {"id": "siem", "sources": 0, "active": 0, "events_today": 0}
+        )
         wazuh_cat["sources"] += len(wazuh_sources)
         wazuh_cat["active"] += wazuh_active
         wazuh_cat["events_today"] += wazuh_events
@@ -145,7 +148,7 @@ async def sources_overview(session: AsyncSession = Depends(get_session)):
 @router.post("/sources", response_model=ConnectorOut, status_code=201)
 async def add_source(
     body: ConnectorCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Add a new log source."""
     if body.connector_type not in CATALOG:
@@ -156,9 +159,7 @@ async def add_source(
     # Validate required fields
     for field in ct.fields:
         if field.required and field.name not in body.credentials and field.name not in body.config:
-            raise HTTPException(
-                422, f"Missing required field: {field.label}"
-            )
+            raise HTTPException(422, f"Missing required field: {field.label}")
 
     instance = ConnectorInstance(
         connector_type=body.connector_type,
@@ -176,7 +177,7 @@ async def add_source(
 @router.post("/sources/{source_id}/test", response_model=ConnectorTestResult)
 async def test_source(
     source_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Test connectivity to a configured source."""
     instance = await session.get(ConnectorInstance, source_id)
@@ -198,7 +199,7 @@ async def test_source(
     instance.status = ConnectorStatus.ACTIVE if success else ConnectorStatus.ERROR
     instance.error_message = None if success else message
     if success:
-        instance.last_event_at = datetime.now(timezone.utc)
+        instance.last_event_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(instance)
 
@@ -212,7 +213,7 @@ async def test_source(
 @router.delete("/sources/{source_id}", status_code=204)
 async def delete_source(
     source_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Remove a configured source."""
     instance = await session.get(ConnectorInstance, source_id)
@@ -225,7 +226,7 @@ async def delete_source(
 @router.patch("/sources/{source_id}/toggle")
 async def toggle_source(
     source_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Enable or disable a source."""
     instance = await session.get(ConnectorInstance, source_id)
@@ -271,10 +272,7 @@ def _simulate_test(ct, instance) -> tuple[bool, str]:
     config = instance.config
 
     # Check that at least one credential field has a value
-    has_creds = any(
-        v and str(v).strip()
-        for v in {**creds, **config}.values()
-    )
+    has_creds = any(v and str(v).strip() for v in {**creds, **config}.values())
 
     if not has_creds:
         return False, "No credentials provided"
@@ -293,7 +291,13 @@ async def _get_wazuh_sources() -> list[ConnectorOut]:
     try:
         wazuh = WazuhAPIClient()
         await wazuh.authenticate()
-        resp = await wazuh.api_get("/agents", params={"limit": 500, "select": "id,name,ip,status,os.platform,os.name,dateAdd,lastKeepAlive"})
+        resp = await wazuh.api_get(
+            "/agents",
+            params={
+                "limit": 500,
+                "select": "id,name,ip,status,os.platform,os.name,dateAdd,lastKeepAlive",
+            },
+        )
         agents = resp.get("data", {}).get("affected_items", [])
     except Exception:
         logger.debug("Could not fetch Wazuh agents", exc_info=True)
@@ -304,26 +308,18 @@ async def _get_wazuh_sources() -> list[ConnectorOut]:
     total_events: dict[str, int] = {}
     try:
         indexer = WazuhIndexerClient()
-        count_resp = await indexer.search("wazuh-alerts-*", {
-            "size": 0,
-            "aggs": {
-                "by_agent": {
-                    "terms": {"field": "agent.name", "size": 500}
-                }
-            }
-        })
+        count_resp = await indexer.search(
+            "wazuh-alerts-*",
+            {"size": 0, "aggs": {"by_agent": {"terms": {"field": "agent.name", "size": 500}}}},
+        )
         for bucket in count_resp.get("aggregations", {}).get("by_agent", {}).get("buckets", []):
             total_events[bucket["key"]] = bucket["doc_count"]
 
-        today = datetime.now(timezone.utc).strftime("%Y.%m.%d")
-        today_resp = await indexer.search(f"wazuh-alerts-4.x-{today}", {
-            "size": 0,
-            "aggs": {
-                "by_agent": {
-                    "terms": {"field": "agent.name", "size": 500}
-                }
-            }
-        })
+        today = datetime.now(UTC).strftime("%Y.%m.%d")
+        today_resp = await indexer.search(
+            f"wazuh-alerts-4.x-{today}",
+            {"size": 0, "aggs": {"by_agent": {"terms": {"field": "agent.name", "size": 500}}}},
+        )
         for bucket in today_resp.get("aggregations", {}).get("by_agent", {}).get("buckets", []):
             agent_events[bucket["key"]] = bucket["doc_count"]
     except Exception:
@@ -340,38 +336,56 @@ async def _get_wazuh_sources() -> list[ConnectorOut]:
         last_alive = agent.get("lastKeepAlive")
 
         is_manager = agent_id == "000"
-        icon = "\U0001f5a5\ufe0f" if os_platform == "windows" else "\U0001f4e1" if is_manager else "\U0001f427" if os_platform == "linux" else "\U0001f4bb"
-        type_name = "Wazuh Manager" if is_manager else f"Wazuh Agent ({os_name or os_platform or 'unknown'})"
+        icon = (
+            "\U0001f5a5\ufe0f"
+            if os_platform == "windows"
+            else "\U0001f4e1"
+            if is_manager
+            else "\U0001f427"
+            if os_platform == "linux"
+            else "\U0001f4bb"
+        )
+        type_name = (
+            "Wazuh Manager"
+            if is_manager
+            else f"Wazuh Agent ({os_name or os_platform or 'unknown'})"
+        )
 
-        mapped_status = "active" if status in ("active", "Active") else "error" if status == "disconnected" else "pending"
+        mapped_status = (
+            "active"
+            if status in ("active", "Active")
+            else "error"
+            if status == "disconnected"
+            else "pending"
+        )
 
         created = None
         if date_add:
             try:
                 created = datetime.fromisoformat(date_add.replace("Z", "+00:00"))
             except (ValueError, AttributeError):
-                created = datetime.now(timezone.utc)
+                created = datetime.now(UTC)
 
         last_event = None
         if last_alive:
-            try:
+            with contextlib.suppress(ValueError, AttributeError):
                 last_event = datetime.fromisoformat(last_alive.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                pass
 
-        sources.append(ConnectorOut(
-            id=uuid.uuid5(uuid.NAMESPACE_DNS, f"wazuh-agent-{agent_id}"),
-            connector_type="wazuh_agent",
-            name=name,
-            type_name=type_name,
-            type_icon=icon,
-            category="siem",
-            status=mapped_status,
-            events_today=agent_events.get(name, 0),
-            events_total=total_events.get(name, 0),
-            last_event_at=last_event,
-            error_message=None if mapped_status != "error" else f"Agent {status}",
-            created_at=created or datetime.now(timezone.utc),
-        ))
+        sources.append(
+            ConnectorOut(
+                id=uuid.uuid5(uuid.NAMESPACE_DNS, f"wazuh-agent-{agent_id}"),
+                connector_type="wazuh_agent",
+                name=name,
+                type_name=type_name,
+                type_icon=icon,
+                category="siem",
+                status=mapped_status,
+                events_today=agent_events.get(name, 0),
+                events_total=total_events.get(name, 0),
+                last_event_at=last_event,
+                error_message=None if mapped_status != "error" else f"Agent {status}",
+                created_at=created or datetime.now(UTC),
+            )
+        )
 
     return sources

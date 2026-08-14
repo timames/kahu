@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,16 +57,16 @@ def parse_question(question: str) -> dict:
         amount = int(time_match.group(1))
         unit = time_match.group(2).lower().rstrip("s")
         if unit in ("hr", "hour"):
-            hints["since"] = datetime.now(timezone.utc) - timedelta(hours=amount)
+            hints["since"] = datetime.now(UTC) - timedelta(hours=amount)
         elif unit in ("day",):
-            hints["since"] = datetime.now(timezone.utc) - timedelta(days=amount)
+            hints["since"] = datetime.now(UTC) - timedelta(days=amount)
         elif unit in ("min", "minute"):
-            hints["since"] = datetime.now(timezone.utc) - timedelta(minutes=amount)
+            hints["since"] = datetime.now(UTC) - timedelta(minutes=amount)
 
     named_match = _NAMED_TIME_RE.search(question)
     if named_match and "since" not in hints:
         word = named_match.group(1).lower()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if word == "today":
             hints["since"] = now.replace(hour=0, minute=0, second=0, microsecond=0)
         elif word == "yesterday":
@@ -115,13 +115,11 @@ async def gather_from_postgres(
 
     # IP filtering requires checking raw_event JSON
     if "ips" in hints:
-        from sqlalchemy import or_, cast, String
+        from sqlalchemy import String, cast, or_
 
         ip_filters = []
         for ip in hints["ips"]:
-            ip_filters.append(
-                cast(Alert.raw_event, String).contains(ip)
-            )
+            ip_filters.append(cast(Alert.raw_event, String).contains(ip))
         stmt = stmt.where(or_(*ip_filters))
 
     # If no filters matched, default to undispositioned alerts
@@ -159,11 +157,13 @@ async def gather_from_indexer(
     if "ips" in hints:
         ip_shoulds = []
         for ip in hints["ips"]:
-            ip_shoulds.extend([
-                {"match": {"data.srcip": ip}},
-                {"match": {"data.dstip": ip}},
-                {"match_phrase": {"full_log": ip}},
-            ])
+            ip_shoulds.extend(
+                [
+                    {"match": {"data.srcip": ip}},
+                    {"match": {"data.dstip": ip}},
+                    {"match_phrase": {"full_log": ip}},
+                ]
+            )
         must_clauses.append({"bool": {"should": ip_shoulds, "minimum_should_match": 1}})
 
     # Host/agent filter

@@ -1,6 +1,7 @@
 """Allow running verify CLI as: python -m kahu_attest"""
 
-from kahu_attest.verify import main
 import sys
+
+from kahu_attest.verify import main
 
 sys.exit(main())

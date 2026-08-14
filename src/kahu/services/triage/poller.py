@@ -2,8 +2,8 @@
 through the triage pipeline on a schedule."""
 
 import asyncio
+import contextlib
 import logging
-from datetime import datetime, timezone
 
 from kahu.clients.ollama import OllamaClient
 from kahu.clients.wazuh import WazuhIndexerClient
@@ -29,14 +29,10 @@ async def poll_once() -> int:
     }
 
     if _last_timestamp:
-        query["query"] = {
-            "range": {"timestamp": {"gt": _last_timestamp}}
-        }
+        query["query"] = {"range": {"timestamp": {"gt": _last_timestamp}}}
     else:
         # First run: get last 5 minutes of alerts
-        query["query"] = {
-            "range": {"timestamp": {"gte": "now-5m"}}
-        }
+        query["query"] = {"range": {"timestamp": {"gte": "now-5m"}}}
 
     try:
         result = await indexer.search(index="wazuh-alerts-*", query=query)
@@ -70,7 +66,11 @@ async def poll_once() -> int:
             )
             log.info(
                 "poller: processed=%d filtered=%d triaged=%d persisted=%d errors=%d",
-                stats.total, stats.filtered, stats.triaged, stats.persisted, stats.errors,
+                stats.total,
+                stats.filtered,
+                stats.triaged,
+                stats.persisted,
+                stats.errors,
             )
             return stats.persisted
         except Exception as exc:
@@ -107,10 +107,8 @@ async def restart_poller(interval: float = 15.0) -> None:
     global _poller_task, _last_timestamp
     if _poller_task is not None:
         _poller_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await _poller_task
-        except asyncio.CancelledError:
-            pass
     _last_timestamp = None
     _poller_task = asyncio.create_task(run_poller(interval))
     log.info("poller: restarted")

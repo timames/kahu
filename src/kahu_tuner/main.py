@@ -6,9 +6,9 @@ Provides /healthz and /metrics endpoints.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
+from datetime import UTC
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -40,17 +40,16 @@ async def metrics():
 @app.post("/run")
 async def trigger_batch():
     """Manually trigger a batch run (for testing/ops)."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
+    from kahu_tuner.batch import run_batch
     from kahu_tuning.config import (
         CanaryConfig,
         RiskConfig,
         TuningConfig,
         load_json,
     )
-    from kahu_tuning.models import FleetPrior, TupleState
     from kahu_tuning.signing import load_private
-    from kahu_tuner.batch import run_batch
 
     config_dir = Path(os.environ.get("KAHU_CONFIG_DIR", "/app/config"))
     key_path = os.environ.get("KAHU_SIGNING_KEY", "/app/keys/tuner.key")
@@ -81,7 +80,7 @@ async def trigger_batch():
     drift_flags.inc(len(result.drift_reviews))
     tuples_processed.set(result.tuples_processed)
     batch_errors.inc(len(result.errors))
-    last_batch_ts.set(datetime.now(timezone.utc).timestamp())
+    last_batch_ts.set(datetime.now(UTC).timestamp())
 
     return {
         "tuples_processed": result.tuples_processed,

@@ -33,11 +33,11 @@ router = APIRouter()
 
 @router.get("/queue", response_model=TriageQueueResponse)
 async def get_triage_queue(
-    severity: str | None = Query(None, pattern="^(critical|high|medium|low|info)$"),
-    undispositioned_only: bool = Query(True),
-    offset: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
-    session: AsyncSession = Depends(get_session),
+    severity: str | None = Query(None, pattern="^(critical|high|medium|low|info)$"),  # noqa: B008
+    undispositioned_only: bool = Query(True),  # noqa: B008
+    offset: int = Query(0, ge=0),  # noqa: B008
+    limit: int = Query(50, ge=1, le=200),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> TriageQueueResponse:
     """Get the alert triage queue, ordered by severity and recency."""
     stmt = select(Alert).options(selectinload(Alert.disposition))
@@ -80,12 +80,12 @@ async def get_triage_queue(
 
 @router.get("/history", response_model=HistoryResponse)
 async def alert_history(
-    severity: str | None = Query(None, pattern="^(critical|high|medium|low|info)$"),
-    verdict: str | None = Query(None),
-    search: str | None = Query(None, max_length=200),
-    offset: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
-    session: AsyncSession = Depends(get_session),
+    severity: str | None = Query(None, pattern="^(critical|high|medium|low|info)$"),  # noqa: B008
+    verdict: str | None = Query(None),  # noqa: B008
+    search: str | None = Query(None, max_length=200),  # noqa: B008
+    offset: int = Query(0, ge=0),  # noqa: B008
+    limit: int = Query(50, ge=1, le=200),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> HistoryResponse:
     """Browse all historic alerts (dispositioned and pending)."""
     stmt = select(Alert).outerjoin(AlertDisposition).options(selectinload(Alert.disposition))
@@ -114,19 +114,21 @@ async def alert_history(
     items = []
     for a in alerts:
         llm = a.llm_triage or {}
-        items.append(HistoryAlertSummary(
-            id=a.id,
-            wazuh_alert_id=a.wazuh_alert_id,
-            rule_id=a.rule_id,
-            rule_description=a.rule_description,
-            severity=a.severity.value if isinstance(a.severity, Severity) else a.severity,
-            agent_name=a.agent_name,
-            created_at=a.created_at,
-            verdict=a.disposition.verdict.value if a.disposition else None,
-            analyst=a.disposition.analyst if a.disposition else None,
-            disposition_at=a.disposition.created_at if a.disposition else None,
-            llm_explanation=llm.get("explanation"),
-        ))
+        items.append(
+            HistoryAlertSummary(
+                id=a.id,
+                wazuh_alert_id=a.wazuh_alert_id,
+                rule_id=a.rule_id,
+                rule_description=a.rule_description,
+                severity=a.severity.value if isinstance(a.severity, Severity) else a.severity,
+                agent_name=a.agent_name,
+                created_at=a.created_at,
+                verdict=a.disposition.verdict.value if a.disposition else None,
+                analyst=a.disposition.analyst if a.disposition else None,
+                disposition_at=a.disposition.created_at if a.disposition else None,
+                llm_explanation=llm.get("explanation"),
+            )
+        )
 
     return HistoryResponse(alerts=items, total=total, offset=offset, limit=limit)
 
@@ -140,14 +142,10 @@ async def list_runbooks():
 @router.get("/alerts/{alert_id}", response_model=AlertDetail)
 async def get_alert_detail(
     alert_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> AlertDetail:
     """Get full detail for a single alert including enrichment and LLM triage."""
-    stmt = (
-        select(Alert)
-        .options(selectinload(Alert.disposition))
-        .where(Alert.id == alert_id)
-    )
+    stmt = select(Alert).options(selectinload(Alert.disposition)).where(Alert.id == alert_id)
     result = await session.execute(stmt)
     alert = result.scalar_one_or_none()
 
@@ -161,7 +159,7 @@ async def get_alert_detail(
 async def disposition_alert(
     alert_id: uuid.UUID,
     body: DispositionIn,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> DispositionOut:
     """Record a human analyst's disposition of an alert.
 
@@ -201,7 +199,7 @@ async def disposition_alert(
 @router.post("/ingest", response_model=PipelineBatchResponse)
 async def ingest_alerts(
     body: PipelineBatchRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> PipelineBatchResponse:
     """Ingest a batch of raw Wazuh alerts through the triage pipeline."""
     indexer = WazuhIndexerClient()
@@ -269,6 +267,7 @@ async def restart_service(service: str):
     elif service == "pipeline":
         # Restart the poller task
         from kahu.services.triage.poller import restart_poller
+
         try:
             await restart_poller()
             return {"status": "ok", "message": "Pipeline restarted"}
@@ -276,9 +275,13 @@ async def restart_service(service: str):
             return {"status": "error", "message": str(e)}
     elif service == "reeval":
         from kahu.services.triage.reeval import run_reeval_cycle
+
         try:
             stats = await run_reeval_cycle()
-            return {"status": "ok", "message": f"Re-evaluated {stats['reviewed']} alerts, promoted {stats['promoted']}"}
+            return {
+                "status": "ok",
+                "message": f"Re-evaluated {stats['reviewed']} alerts, promoted {stats['promoted']}",
+            }
         except Exception as e:
             return {"status": "error", "message": str(e)}
     else:

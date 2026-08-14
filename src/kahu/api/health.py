@@ -15,7 +15,7 @@ async def health_check() -> dict[str, str]:
 async def indexer_health() -> dict:
     """Proxy indexer cluster health so the browser doesn't hit self-signed certs directly."""
     try:
-        async with httpx.AsyncClient(verify=False, timeout=5) as client:
+        async with httpx.AsyncClient(verify=False, timeout=5) as client:  # noqa: S501
             r = await client.get(
                 f"{settings.wazuh_indexer_url}/_cluster/health",
                 auth=(settings.wazuh_indexer_user, settings.wazuh_indexer_password),

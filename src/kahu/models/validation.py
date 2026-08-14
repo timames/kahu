@@ -3,15 +3,16 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, Float, Integer, String, Text, func
 from sqlalchemy import JSON as JSONB
+from sqlalchemy import DateTime, Float, Integer, String, func
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
 from kahu.models.base import Base, UUIDPrimaryKey
 
 
-class ValidationVerdict(str, enum.Enum):
-    PASS = "pass"
+class ValidationVerdict(enum.StrEnum):
+    PASS = "pass"  # noqa: S105
     FAIL = "fail"
     UNREACHABLE = "unreachable"
     PENDING = "pending"
@@ -28,9 +29,7 @@ class ValidationSample(Base, UUIDPrimaryKey):
     scheduled_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verdict: Mapped[ValidationVerdict] = mapped_column(
         SAEnum(ValidationVerdict, name="validation_verdict"),
         default=ValidationVerdict.PENDING,
@@ -48,9 +47,7 @@ class ValidationRound(Base, UUIDPrimaryKey):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sample_size: Mapped[int] = mapped_column(Integer)
     fleet_size: Mapped[int] = mapped_column(Integer)
     samples_completed: Mapped[int] = mapped_column(Integer, default=0)

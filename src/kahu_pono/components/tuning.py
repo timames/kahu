@@ -34,7 +34,10 @@ def score_tuning(inp: TuningInput, subweights: dict[str, float]) -> tuple[float,
 
     # Active suppression count: ratio of active vs expected
     if inp.expected_suppressions > 0:
-        scores["active_suppression_count"] = min(1.0, inp.active_suppressions / inp.expected_suppressions)
+        scores["active_suppression_count"] = min(
+            1.0,
+            inp.active_suppressions / inp.expected_suppressions,
+        )
     else:
         scores["active_suppression_count"] = 1.0 if inp.active_suppressions > 0 else 0.0
 

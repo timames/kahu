@@ -7,7 +7,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import desc, select, func
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.db import get_session
@@ -20,6 +20,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
+
 
 class ComponentOut(BaseModel):
     name: str
@@ -61,15 +62,14 @@ class HistoryResponse(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 
+
 @router.get("/current", response_model=SnapshotOut | None)
 async def get_current_score(
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Get the most recent Pono Score snapshot."""
     result = await session.execute(
-        select(PonoSnapshot)
-        .order_by(desc(PonoSnapshot.timestamp))
-        .limit(1)
+        select(PonoSnapshot).order_by(desc(PonoSnapshot.timestamp)).limit(1)
     )
     snapshot = result.scalar_one_or_none()
     if snapshot is None:
@@ -79,16 +79,14 @@ async def get_current_score(
 
 @router.get("/history", response_model=HistoryResponse)
 async def get_score_history(
-    offset: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
-    session: AsyncSession = Depends(get_session),
+    offset: int = Query(0, ge=0),  # noqa: B008
+    limit: int = Query(100, ge=1, le=500),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Get Pono Score history for time-series display."""
     stmt = select(PonoSnapshot).order_by(desc(PonoSnapshot.timestamp))
 
-    total = await session.scalar(
-        select(func.count()).select_from(stmt.subquery())
-    ) or 0
+    total = await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
 
     result = await session.execute(stmt.offset(offset).limit(limit))
     snapshots = result.scalars().all()
@@ -112,19 +110,20 @@ async def get_score_history(
 @router.get("/snapshots/{snapshot_id}", response_model=SnapshotOut)
 async def get_snapshot(
     snapshot_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Get full detail of a specific snapshot."""
     snapshot = await session.get(PonoSnapshot, snapshot_id)
     if snapshot is None:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="Snapshot not found")
     return _to_out(snapshot)
 
 
 @router.post("/recalculate", response_model=SnapshotOut)
 async def recalculate(
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Trigger an immediate Pono Score recalculation."""
     snapshot = await compute_and_persist(session, trigger="manual")

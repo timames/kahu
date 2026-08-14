@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kahu_tuning.config import config_hash, load_json
+from kahu_tuning.config import load_json
 
 
 @dataclass(frozen=True)

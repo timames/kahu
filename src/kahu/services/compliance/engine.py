@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import desc, func as sa_func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.models.alerts import Alert
@@ -26,6 +26,7 @@ EVIDENCE_FRESHNESS_DAYS = 90
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ControlStatus:
@@ -87,7 +88,10 @@ class GapAnalysis:
 # ---------------------------------------------------------------------------
 
 KAHU_CAPABILITIES: dict[str, str] = {
-    "audit_logging": "Kahu continuously collects and indexes security events from all connected sources",
+    "audit_logging": (
+        "Kahu continuously collects and indexes"
+        " security events from all connected sources"
+    ),
     "monitoring": "Real-time monitoring via Wazuh SIEM with AI-assisted triage",
     "siem": "Wazuh SIEM/XDR integration with local AI correlation",
     "incident_response": "Automated alert triage pipeline with human-in-the-loop disposition",
@@ -111,28 +115,55 @@ KAHU_CAPABILITIES: dict[str, str] = {
 
 # Recommendations for tags Kahu does NOT cover — these need manual/policy controls.
 MANUAL_RECOMMENDATIONS: dict[str, str] = {
-    "governance": "Establish a documented security governance policy and assign oversight responsibilities",
+    "governance": (
+        "Establish a documented security governance"
+        " policy and assign oversight responsibilities"
+    ),
     "training": "Implement a security awareness training program for all personnel",
     "identity": "Deploy an identity provider with centralized user lifecycle management",
     "mfa": "Enable multi-factor authentication on all externally-accessible systems",
-    "least_privilege": "Conduct a privilege review and enforce least-privilege access across systems",
-    "session_management": "Configure automatic session timeout/logoff on systems handling sensitive data",
+    "least_privilege": (
+        "Conduct a privilege review and enforce"
+        " least-privilege access across systems"
+    ),
+    "session_management": (
+        "Configure automatic session timeout/logoff"
+        " on systems handling sensitive data"
+    ),
     "data_protection": "Classify data assets and implement handling procedures per classification",
     "integrity": "Implement integrity controls (checksums, digital signatures) for critical data",
-    "encryption": "Deploy TLS/encryption for data in transit and at rest; verify FIPS compliance if required",
+    "encryption": (
+        "Deploy TLS/encryption for data in transit"
+        " and at rest; verify FIPS compliance if required"
+    ),
     "cryptography": "Inventory cryptographic implementations and validate algorithm/key strength",
     "network_segmentation": "Segment the network to isolate publicly-accessible components",
-    "boundary_protection": "Deploy boundary protection (firewall, WAF) at all network trust boundaries",
+    "boundary_protection": (
+        "Deploy boundary protection (firewall, WAF)"
+        " at all network trust boundaries"
+    ),
     "baseline": "Establish and document baseline configurations for all system types",
-    "change_management": "Implement a change management process with approval, testing, and documentation",
-    "risk_assessment": "Conduct periodic risk assessments and document results with remediation plans",
-    "security_assessment": "Schedule periodic security control assessments (internal or third-party)",
+    "change_management": (
+        "Implement a change management process"
+        " with approval, testing, and documentation"
+    ),
+    "risk_assessment": (
+        "Conduct periodic risk assessments and"
+        " document results with remediation plans"
+    ),
+    "security_assessment": (
+        "Schedule periodic security control"
+        " assessments (internal or third-party)"
+    ),
     "attribution": "Ensure all system actions can be traced to individual authenticated users",
     "log_retention": "Define and enforce log retention policies meeting regulatory requirements",
     "remediation": "Establish a vulnerability remediation SLA and track closure rates",
     "testing": "Conduct periodic incident response tabletop exercises and document results",
     "netflow": "Enable network flow logging (NetFlow/sFlow) on core switches and routers",
-    "asset_inventory": "Maintain an up-to-date inventory of all enterprise hardware and software assets",
+    "asset_inventory": (
+        "Maintain an up-to-date inventory of all"
+        " enterprise hardware and software assets"
+    ),
 }
 
 
@@ -159,13 +190,14 @@ TAG_PRIORITY: dict[str, int] = {
 # Engine functions
 # ---------------------------------------------------------------------------
 
+
 async def compute_coverage(
     framework_id: str,
     framework: dict,
     session: AsyncSession,
 ) -> CoverageReport:
     """Compute full coverage report for a framework using real evidence data."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=EVIDENCE_FRESHNESS_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=EVIDENCE_FRESHNESS_DAYS)
 
     # Gather evidence stats: tag → (count, latest_timestamp)
     evidence_stats = await _evidence_stats_by_tag(session)
@@ -196,13 +228,15 @@ async def compute_coverage(
 
         fam_covered = sum(1 for c in controls if c.covered)
         fam_gaps = sum(1 for c in controls if c.gap)
-        families.append(FamilyStatus(
-            family_id=fam_id,
-            family_name=fam["name"],
-            controls=controls,
-            coverage_pct=round(fam_covered / len(controls) * 100, 1) if controls else 0,
-            gap_count=fam_gaps,
-        ))
+        families.append(
+            FamilyStatus(
+                family_id=fam_id,
+                family_name=fam["name"],
+                controls=controls,
+                coverage_pct=round(fam_covered / len(controls) * 100, 1) if controls else 0,
+                gap_count=fam_gaps,
+            )
+        )
 
     return CoverageReport(
         framework_id=framework_id,
@@ -268,6 +302,7 @@ async def analyze_gaps(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _evaluate_control(
     ctrl: dict,
@@ -355,9 +390,7 @@ async def _evidence_stats_by_tag(
         return {row[0]: (row[1], row[2]) for row in result.all()}
 
     # SQLite / fallback: load records and aggregate in Python
-    result = await session.execute(
-        select(EvidenceRecord.control_tags, EvidenceRecord.timestamp)
-    )
+    result = await session.execute(select(EvidenceRecord.control_tags, EvidenceRecord.timestamp))
     stats: dict[str, tuple[int, datetime | None]] = {}
     for tags, ts in result.all():
         if not tags:
@@ -373,9 +406,7 @@ async def _evidence_stats_by_tag(
 
 async def _alert_control_tags(session: AsyncSession) -> set[str]:
     """Collect unique control tags from all alerts."""
-    result = await session.execute(
-        select(Alert.control_tags).where(Alert.control_tags.isnot(None))
-    )
+    result = await session.execute(select(Alert.control_tags).where(Alert.control_tags.isnot(None)))
     tags: set[str] = set()
     for row in result.scalars().all():
         if row:

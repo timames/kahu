@@ -5,12 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from kahu_attest.bundle import build_attestation, build_pono_snapshot, sign_attestation
 from kahu_attest.verify import main, verify_bundle
-from kahu_tuning.signing import generate_keypair, save_private_key, save_public_key
-
+from kahu_tuning.signing import generate_keypair, save_public_key
 
 # --- Helpers ---
 

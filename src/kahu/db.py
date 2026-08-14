@@ -1,4 +1,4 @@
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from kahu.config import settings
 
@@ -16,8 +16,8 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 async def create_tables() -> None:
     """Create all tables (for SQLite dev mode). No-op if tables exist."""
-    from kahu.models.base import Base
     import kahu.models  # noqa: F401 — ensure all models are imported
+    from kahu.models.base import Base
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

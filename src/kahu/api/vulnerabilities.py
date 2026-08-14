@@ -90,7 +90,7 @@ async def list_targets():
         targets = await gvm.get_targets()
     except Exception:
         log.exception("Failed to list targets")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return {"targets": targets}
 
 
@@ -100,11 +100,13 @@ async def create_target(body: ScanTargetCreate):
     gvm = GreenboneClient()
     try:
         result = await gvm.create_target(
-            name=body.name, hosts=body.hosts, port_list_id=body.port_list_id,
+            name=body.name,
+            hosts=body.hosts,
+            port_list_id=body.port_list_id,
         )
     except Exception:
         log.exception("Failed to create target")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return result
 
 
@@ -119,7 +121,7 @@ async def list_scan_configs():
         configs = await gvm.get_scan_configs()
     except Exception:
         log.exception("Failed to list scan configs")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return {"configs": configs}
 
 
@@ -131,7 +133,7 @@ async def list_port_lists():
         port_lists = await gvm.get_port_lists()
     except Exception:
         log.exception("Failed to list port lists")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return {"port_lists": port_lists}
 
 
@@ -143,7 +145,7 @@ async def list_scanners():
         scanners = await gvm.get_scanners()
     except Exception:
         log.exception("Failed to list scanners")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return {"scanners": scanners}
 
 
@@ -158,7 +160,7 @@ async def list_scans():
         tasks = await gvm.get_tasks()
     except Exception:
         log.exception("Failed to list scans")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return {"scans": tasks}
 
 
@@ -178,7 +180,7 @@ async def create_scan(body: ScanTaskCreate):
             task["status"] = "Requested"
     except Exception:
         log.exception("Failed to create scan")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return task
 
 
@@ -190,7 +192,7 @@ async def start_scan(task_id: str):
         result = await gvm.start_task(task_id)
     except Exception:
         log.exception("Failed to start scan")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return result
 
 
@@ -202,7 +204,7 @@ async def stop_scan(task_id: str):
         result = await gvm.stop_task(task_id)
     except Exception:
         log.exception("Failed to stop scan")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return result
 
 
@@ -214,7 +216,7 @@ async def delete_scan(task_id: str):
         result = await gvm.delete_task(task_id)
     except Exception:
         log.exception("Failed to delete scan")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return result
 
 
@@ -231,7 +233,7 @@ async def get_scan(task_id: str):
         raise
     except Exception:
         log.exception("Failed to get scan details")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return task
 
 
@@ -246,27 +248,29 @@ async def list_results(task_id: str = "", severity_min: float = 0.0):
         results = await gvm.get_results(task_id=task_id, severity_min=severity_min)
     except Exception:
         log.exception("Failed to fetch results")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
 
     findings = []
     for r in results:
         sev_score = r.get("severity", 0)
         nvt = r.get("nvt", {})
-        findings.append({
-            "id": r.get("id", ""),
-            "name": r.get("name", "Unknown"),
-            "host": r.get("host", ""),
-            "port": r.get("port", ""),
-            "severity": sev_score,
-            "severity_label": _classify_severity(sev_score),
-            "cve": nvt.get("cve", ""),
-            "family": nvt.get("family", ""),
-            "description": r.get("description", ""),
-            "solution": nvt.get("solution", ""),
-            "solution_type": nvt.get("solution_type", ""),
-            "qod": r.get("qod", ""),
-            "task_id": r.get("task_id", ""),
-        })
+        findings.append(
+            {
+                "id": r.get("id", ""),
+                "name": r.get("name", "Unknown"),
+                "host": r.get("host", ""),
+                "port": r.get("port", ""),
+                "severity": sev_score,
+                "severity_label": _classify_severity(sev_score),
+                "cve": nvt.get("cve", ""),
+                "family": nvt.get("family", ""),
+                "description": r.get("description", ""),
+                "solution": nvt.get("solution", ""),
+                "solution_type": nvt.get("solution_type", ""),
+                "qod": r.get("qod", ""),
+                "task_id": r.get("task_id", ""),
+            }
+        )
 
     findings.sort(key=lambda f: f["severity"], reverse=True)
     return {"findings": findings, "total": len(findings)}
@@ -280,7 +284,7 @@ async def list_reports(task_id: str = ""):
         reports = await gvm.get_reports(task_id=task_id)
     except Exception:
         log.exception("Failed to fetch reports")
-        raise HTTPException(502, "Scanner unavailable")
+        raise HTTPException(502, "Scanner unavailable") from None
     return {"reports": reports}
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -23,8 +23,8 @@ router = APIRouter()
 
 @router.get("/executive")
 async def executive_report(
-    days: int = Query(7, ge=1, le=90, description="Number of days to cover"),
-    session: AsyncSession = Depends(get_session),
+    days: int = Query(7, ge=1, le=90, description="Number of days to cover"),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:
     """Generate an AI-assisted executive security summary.
 
@@ -32,7 +32,7 @@ async def executive_report(
     top threat sources, and concrete recommendations — written
     in plain language for non-technical leadership.
     """
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
     return await generate_executive_report(session, since)
 
 
@@ -49,7 +49,7 @@ class IncidentReportRequest(BaseModel):
 @router.post("/incident")
 async def incident_report(
     body: IncidentReportRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:
     """Generate an AI-assisted incident report from a set of related alerts.
 
@@ -64,8 +64,8 @@ async def incident_report(
 
 @router.get("/evidence")
 async def evidence_package(
-    days: int = Query(30, ge=1, le=365, description="Number of days to cover"),
-    session: AsyncSession = Depends(get_session),
+    days: int = Query(30, ge=1, le=365, description="Number of days to cover"),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:
     """Generate a compliance evidence package.
 
@@ -73,5 +73,5 @@ async def evidence_package(
     verification, event type breakdown, and an auditor-facing
     narrative summary. Suitable for HIPAA, PCI DSS, and NIST audits.
     """
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
     return await generate_evidence_package(session, since)

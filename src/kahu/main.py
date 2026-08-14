@@ -1,14 +1,14 @@
 import asyncio
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from kahu.config import settings
 from kahu.api import router as api_router
+from kahu.config import settings
 from kahu.db import engine
 from kahu.services.pono import run_pono_loop
 from kahu.services.triage.poller import run_poller
@@ -22,6 +22,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Auto-create tables for SQLite dev mode
     if settings.database_url.startswith("sqlite"):
         from kahu.db import create_tables
+
         await create_tables()
 
     # Startup — launch background tasks

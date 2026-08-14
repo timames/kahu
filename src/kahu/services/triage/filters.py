@@ -32,21 +32,21 @@ SUPPRESSED_RULE_IDS: set[str] = {
     "86001",  # Wazuh agent started
     "86002",  # Wazuh agent disconnected (transient on laptops)
     "86003",  # Wazuh agent reconnected
-    "5104",   # Interface entered promiscuous mode (Docker/Hyper-V noise)
-    "5302",   # User login session closed (excessive volume)
-    "502",    # Ossec server started (manager self-monitoring)
-    "510",    # Host-based anomaly detection — rootcheck (manager self-scan noise)
-    "550",    # Integrity checksum changed (manager self-monitoring)
-    "5501",   # Windows logon success (EventID 4624) — routine login noise
-    "5701",   # Antivirus scan completed — operational noise
-    "5000",   # WiFi AP client connected — network device chatter
+    "5104",  # Interface entered promiscuous mode (Docker/Hyper-V noise)
+    "5302",  # User login session closed (excessive volume)
+    "502",  # Ossec server started (manager self-monitoring)
+    "510",  # Host-based anomaly detection — rootcheck (manager self-scan noise)
+    "550",  # Integrity checksum changed (manager self-monitoring)
+    "5501",  # Windows logon success (EventID 4624) — routine login noise
+    "5701",  # Antivirus scan completed — operational noise
+    "5000",  # WiFi AP client connected — network device chatter
 }
 
 # Rules that must never be suppressed regardless of level or dedup.
 CRITICAL_RULE_IDS: set[str] = {
-    "554",    # Attempt to exploit known vulnerability
-    "100100", # File integrity change on critical path
-    "100200", # Rootkit detection
+    "554",  # Attempt to exploit known vulnerability
+    "100100",  # File integrity change on critical path
+    "100200",  # Rootkit detection
     "87700",  # Vulnerability detected — critical CVSS
     "87900",  # Active response triggered
 }

@@ -4,11 +4,11 @@ from datetime import date
 
 import pytest
 
+from kahu_tuner.batch import run_batch
 from kahu_tuning.config import CanaryConfig, RiskConfig, TuningConfig
-from kahu_tuning.models import FleetPrior, TupleState, WindowState
+from kahu_tuning.models import TupleState, WindowState
 from kahu_tuning.proposal import verify_proposal_signature
 from kahu_tuning.signing import generate_keypair
-from kahu_tuner.batch import run_batch
 
 
 @pytest.fixture

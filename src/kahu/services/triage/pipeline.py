@@ -13,18 +13,17 @@ deterministic finding. The model advises; the ruleset governs.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.clients.ollama import OllamaClient
 from kahu.clients.wazuh import WazuhIndexerClient
-from kahu.models.alerts import Alert
-from kahu.services.triage.filters import FilterResult, apply_deterministic_filters
-from kahu.services.triage.enrichment import EnrichedAlert, enrich_alert_group
-from kahu.services.triage.llm_triage import run_llm_triage
-from kahu.services.triage.disposition import persist_alert
 from kahu.services.triage.auto_disposition import maybe_auto_dispose
+from kahu.services.triage.disposition import persist_alert
+from kahu.services.triage.enrichment import enrich_alert_group
+from kahu.services.triage.filters import FilterResult, apply_deterministic_filters
+from kahu.services.triage.llm_triage import run_llm_triage
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +46,7 @@ class PipelineResult:
 @dataclass
 class PipelineStats:
     """Counters for a batch run — useful for health reporting."""
+
     total: int = 0
     filtered: int = 0
     triaged: int = 0
@@ -73,7 +73,9 @@ async def run_pipeline(
 
     # Stage 2: Enrichment
     enriched = await enrich_alert_group(
-        filtered.alert, session=session, indexer=indexer,
+        filtered.alert,
+        session=session,
+        indexer=indexer,
     )
 
     # Stage 3: LLM triage
@@ -119,7 +121,9 @@ async def run_pipeline(
             # ruleset keeps governing the auto-dismiss decision, not just the
             # displayed severity number.
             auto_result = await maybe_auto_dispose(
-                alert, llm_result, session,
+                alert,
+                llm_result,
+                session,
                 deterministic_severity=filtered.severity,
                 critical_rule=filtered.critical_rule,
             )
@@ -150,7 +154,10 @@ async def run_pipeline_batch(
     for raw_alert in raw_alerts:
         try:
             result = await run_pipeline(
-                raw_alert, session=session, indexer=indexer, ollama=ollama,
+                raw_alert,
+                session=session,
+                indexer=indexer,
+                ollama=ollama,
             )
             results.append(result)
 

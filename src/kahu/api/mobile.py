@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -17,13 +17,13 @@ from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Seve
 from kahu.models.tickets import Ticket, TicketStatus, TicketType
 from kahu.models.users import User
 from kahu.models.xp import XpEvent
-from kahu.services.triage.disposition import record_disposition
-from kahu.services.triage.llm_triage import canonical_verdict
 from kahu.services.triage.auto_disposition import (
     get_tolerance,
     maybe_auto_dispose,
     set_tolerance_audited,
 )
+from kahu.services.triage.disposition import record_disposition
+from kahu.services.triage.llm_triage import canonical_verdict
 
 router = APIRouter()
 
@@ -31,6 +31,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
+
 
 class GlanceResponse(BaseModel):
     color: str  # green | yellow | red
@@ -98,8 +99,9 @@ class CoachResponse(BaseModel):
 # Glance — one color, one number, one sentence
 # ---------------------------------------------------------------------------
 
+
 @router.get("/glance", response_model=GlanceResponse)
-async def glance(session: AsyncSession = Depends(get_session)) -> GlanceResponse:
+async def glance(session: AsyncSession = Depends(get_session)) -> GlanceResponse:  # noqa: B008
     """The lock-screen view. One color, one number, one sentence."""
 
     # Count undispositioned alerts by severity
@@ -110,7 +112,9 @@ async def glance(session: AsyncSession = Depends(get_session)) -> GlanceResponse
         .group_by(Alert.severity)
     )
     result = await session.execute(stmt)
-    counts = {row[0].value if isinstance(row[0], Severity) else row[0]: row[1] for row in result.all()}
+    counts = {
+        row[0].value if isinstance(row[0], Severity) else row[0]: row[1] for row in result.all()
+    }
 
     critical = counts.get("critical", 0)
     high = counts.get("high", 0)
@@ -122,10 +126,15 @@ async def glance(session: AsyncSession = Depends(get_session)) -> GlanceResponse
     # Determine color
     if critical > 0:
         color = "red"
-        headline = f"{critical} critical alert{'s' if critical != 1 else ''} need your attention right now."
+        headline = (
+            f"{critical} critical alert{'s' if critical != 1 else ''}"
+            f" need your attention right now."
+        )
     elif high > 0:
         color = "yellow"
-        headline = f"{high} high-severity alert{'s' if high != 1 else ''} to review when you get a chance."
+        headline = (
+            f"{high} high-severity alert{'s' if high != 1 else ''} to review when you get a chance."
+        )
     elif total > 0:
         color = "green"
         headline = f"All clear. {total} routine item{'s' if total != 1 else ''} in the queue."
@@ -138,7 +147,7 @@ async def glance(session: AsyncSession = Depends(get_session)) -> GlanceResponse
         count=total,
         headline=headline,
         breakdown={"critical": critical, "high": high, "medium": medium, "low": low, "info": info},
-        last_updated=datetime.now(timezone.utc),
+        last_updated=datetime.now(UTC),
     )
 
 
@@ -146,15 +155,22 @@ async def glance(session: AsyncSession = Depends(get_session)) -> GlanceResponse
 # Feed — swipeable alert cards
 # ---------------------------------------------------------------------------
 
+
 @router.get("/feed", response_model=FeedResponse)
 async def feed(
-    limit: int = Query(10, ge=1, le=50),
-    session: AsyncSession = Depends(get_session),
+    limit: int = Query(10, ge=1, le=50),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> FeedResponse:
     """Get the next batch of alert cards for the swipe feed."""
 
     severity_order = case(
-        {Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2, Severity.LOW: 3, Severity.INFO: 4},
+        {
+            Severity.CRITICAL: 0,
+            Severity.HIGH: 1,
+            Severity.MEDIUM: 2,
+            Severity.LOW: 3,
+            Severity.INFO: 4,
+        },
         value=Alert.severity,
         else_=5,
     )
@@ -201,19 +217,23 @@ async def feed(
             elif ai_confidence >= 0.5:
                 ai_verdict = "escalate"
 
-        cards.append(FeedCard(
-            id=a.id,
-            severity=a.severity.value if isinstance(a.severity, Severity) else a.severity,
-            title=a.rule_description or f"Rule {a.rule_id}",
-            explanation=llm.get("explanation", "AI analysis unavailable — review the raw alert data."),
-            ai_verdict=ai_verdict,
-            ai_confidence=ai_confidence,
-            agent=a.agent_name,
-            source_ip=source_ip,
-            timestamp=a.created_at,
-            recommended_actions=llm.get("recommended_actions", []),
-            controls=a.control_tags or [],
-        ))
+        cards.append(
+            FeedCard(
+                id=a.id,
+                severity=a.severity.value if isinstance(a.severity, Severity) else a.severity,
+                title=a.rule_description or f"Rule {a.rule_id}",
+                explanation=llm.get(
+                    "explanation", "AI analysis unavailable — review the raw alert data."
+                ),
+                ai_verdict=ai_verdict,
+                ai_confidence=ai_confidence,
+                agent=a.agent_name,
+                source_ip=source_ip,
+                timestamp=a.created_at,
+                recommended_actions=llm.get("recommended_actions", []),
+                controls=a.control_tags or [],
+            )
+        )
 
     return FeedResponse(cards=cards, remaining=remaining)
 
@@ -222,11 +242,12 @@ async def feed(
 # Swipe — disposition via gesture
 # ---------------------------------------------------------------------------
 
+
 @router.post("/feed/{alert_id}/swipe", response_model=SwipeOut)
 async def swipe(
     alert_id: uuid.UUID,
     body: SwipeIn,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> SwipeOut:
     """Swipe to disposition an alert. Right=TP, Left=FP, Up=Escalate."""
 
@@ -271,11 +292,17 @@ async def swipe(
     ticket_id = None
     ttype = None
     if verdict in (DispositionVerdict.TRUE_POSITIVE, DispositionVerdict.UNDETERMINED):
-        ttype = TicketType.INCIDENT if verdict == DispositionVerdict.TRUE_POSITIVE else TicketType.INVESTIGATION
+        ttype = (
+            TicketType.INCIDENT
+            if verdict == DispositionVerdict.TRUE_POSITIVE
+            else TicketType.INVESTIGATION
+        )
         ticket = Ticket(
             alert_id=alert_id,
             title=alert.rule_description or f"Rule {alert.rule_id}",
-            severity=alert.severity.value if isinstance(alert.severity, Severity) else alert.severity,
+            severity=alert.severity.value
+            if isinstance(alert.severity, Severity)
+            else alert.severity,
             ticket_type=ttype.value,
             status=TicketStatus.OPEN,
             assigned_to=body.analyst,
@@ -308,14 +335,10 @@ class BatchAckResponse(BaseModel):
 @router.post("/feed/batch-acknowledge", response_model=BatchAckResponse)
 async def batch_acknowledge(
     body: BatchAckRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> BatchAckResponse:
     """Acknowledge all pending alerts in one action."""
-    stmt = (
-        select(Alert)
-        .outerjoin(AlertDisposition)
-        .where(AlertDisposition.id.is_(None))
-    )
+    stmt = select(Alert).outerjoin(AlertDisposition).where(AlertDisposition.id.is_(None))
     result = await session.execute(stmt)
     alerts = result.scalars().all()
 
@@ -343,62 +366,78 @@ async def batch_acknowledge(
 # Score — gamification
 # ---------------------------------------------------------------------------
 
+
 @router.get("/score", response_model=ScoreResponse)
 async def score(
-    analyst: str = Query(default="mobile-user"),
-    session: AsyncSession = Depends(get_session),
+    analyst: str = Query(default="mobile-user"),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> ScoreResponse:
     """Get the analyst's security score, streak, and badges."""
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Alerts handled today
-    today_count = await session.scalar(
-        select(func.count())
-        .select_from(AlertDisposition)
-        .where(
-            AlertDisposition.analyst == analyst,
-            AlertDisposition.created_at >= today_start,
+    today_count = (
+        await session.scalar(
+            select(func.count())
+            .select_from(AlertDisposition)
+            .where(
+                AlertDisposition.analyst == analyst,
+                AlertDisposition.created_at >= today_start,
+            )
         )
-    ) or 0
+        or 0
+    )
 
     # Total handled ever
-    total_handled = await session.scalar(
-        select(func.count())
-        .select_from(AlertDisposition)
-        .where(AlertDisposition.analyst == analyst)
-    ) or 0
+    total_handled = (
+        await session.scalar(
+            select(func.count())
+            .select_from(AlertDisposition)
+            .where(AlertDisposition.analyst == analyst)
+        )
+        or 0
+    )
 
     # Pending alerts
-    pending = await session.scalar(
-        select(func.count())
-        .select_from(Alert)
-        .outerjoin(AlertDisposition)
-        .where(AlertDisposition.id.is_(None))
-    ) or 0
+    pending = (
+        await session.scalar(
+            select(func.count())
+            .select_from(Alert)
+            .outerjoin(AlertDisposition)
+            .where(AlertDisposition.id.is_(None))
+        )
+        or 0
+    )
 
     # Pending critical
-    pending_critical = await session.scalar(
-        select(func.count())
-        .select_from(Alert)
-        .outerjoin(AlertDisposition)
-        .where(AlertDisposition.id.is_(None), Alert.severity == Severity.CRITICAL)
-    ) or 0
+    pending_critical = (
+        await session.scalar(
+            select(func.count())
+            .select_from(Alert)
+            .outerjoin(AlertDisposition)
+            .where(AlertDisposition.id.is_(None), Alert.severity == Severity.CRITICAL)
+        )
+        or 0
+    )
 
     # Calculate streak (consecutive days with at least one disposition)
     streak = 0
     check_date = today_start
     for _ in range(365):
-        day_count = await session.scalar(
-            select(func.count())
-            .select_from(AlertDisposition)
-            .where(
-                AlertDisposition.analyst == analyst,
-                AlertDisposition.created_at >= check_date,
-                AlertDisposition.created_at < check_date + timedelta(days=1),
+        day_count = (
+            await session.scalar(
+                select(func.count())
+                .select_from(AlertDisposition)
+                .where(
+                    AlertDisposition.analyst == analyst,
+                    AlertDisposition.created_at >= check_date,
+                    AlertDisposition.created_at < check_date + timedelta(days=1),
+                )
             )
-        ) or 0
+            or 0
+        )
         if day_count > 0:
             streak += 1
             check_date -= timedelta(days=1)
@@ -409,8 +448,8 @@ async def score(
     avg_resp = await session.execute(
         select(
             func.avg(
-                func.extract("epoch", AlertDisposition.created_at) -
-                func.extract("epoch", Alert.created_at)
+                func.extract("epoch", AlertDisposition.created_at)
+                - func.extract("epoch", Alert.created_at)
             )
         )
         .select_from(AlertDisposition)
@@ -430,15 +469,18 @@ async def score(
 
     # Trend (compare today vs yesterday)
     yesterday_start = today_start - timedelta(days=1)
-    yesterday_count = await session.scalar(
-        select(func.count())
-        .select_from(AlertDisposition)
-        .where(
-            AlertDisposition.analyst == analyst,
-            AlertDisposition.created_at >= yesterday_start,
-            AlertDisposition.created_at < today_start,
+    yesterday_count = (
+        await session.scalar(
+            select(func.count())
+            .select_from(AlertDisposition)
+            .where(
+                AlertDisposition.analyst == analyst,
+                AlertDisposition.created_at >= yesterday_start,
+                AlertDisposition.created_at < today_start,
+            )
         )
-    ) or 0
+        or 0
+    )
 
     if today_count > yesterday_count:
         trend = "up"
@@ -450,7 +492,13 @@ async def score(
     # Badges
     badges = []
     if total_handled >= 1:
-        badges.append({"id": "first_response", "name": "First Responder", "description": "Handled your first alert"})
+        badges.append(
+            {
+                "id": "first_response",
+                "name": "First Responder",
+                "description": "Handled your first alert",
+            }
+        )
     if total_handled >= 100:
         badges.append({"id": "centurion", "name": "Centurion", "description": "100 alerts handled"})
     if streak >= 7:
@@ -458,41 +506,63 @@ async def score(
     if streak >= 30:
         badges.append({"id": "iron_wall", "name": "Iron Wall", "description": "30-day streak"})
     if pending_critical == 0 and total_handled > 0:
-        badges.append({"id": "zero_critical", "name": "Zero Critical", "description": "No pending critical alerts"})
+        badges.append(
+            {
+                "id": "zero_critical",
+                "name": "Zero Critical",
+                "description": "No pending critical alerts",
+            }
+        )
     if avg_minutes and avg_minutes < 15:
-        badges.append({"id": "speed_demon", "name": "Speed Demon", "description": "Average response under 15 minutes"})
+        badges.append(
+            {
+                "id": "speed_demon",
+                "name": "Speed Demon",
+                "description": "Average response under 15 minutes",
+            }
+        )
 
     # XP from database
-    total_xp = await session.scalar(
-        select(func.coalesce(func.sum(XpEvent.points), 0))
-        .where(XpEvent.analyst == analyst)
-    ) or 0
+    total_xp = (
+        await session.scalar(
+            select(func.coalesce(func.sum(XpEvent.points), 0)).where(XpEvent.analyst == analyst)
+        )
+        or 0
+    )
 
     # Open tickets
-    open_tickets = await session.scalar(
-        select(func.count())
-        .select_from(Ticket)
-        .where(
-            Ticket.assigned_to == analyst,
-            Ticket.status != TicketStatus.CLOSED,
+    open_tickets = (
+        await session.scalar(
+            select(func.count())
+            .select_from(Ticket)
+            .where(
+                Ticket.assigned_to == analyst,
+                Ticket.status != TicketStatus.CLOSED,
+            )
         )
-    ) or 0
+        or 0
+    )
 
     # Weekly summary
     week_start = today_start - timedelta(days=7)
-    week_count = await session.scalar(
-        select(func.count())
-        .select_from(AlertDisposition)
-        .where(
-            AlertDisposition.analyst == analyst,
-            AlertDisposition.created_at >= week_start,
+    week_count = (
+        await session.scalar(
+            select(func.count())
+            .select_from(AlertDisposition)
+            .where(
+                AlertDisposition.analyst == analyst,
+                AlertDisposition.created_at >= week_start,
+            )
         )
-    ) or 0
+        or 0
+    )
 
     if week_count == 0:
         weekly_summary = "No alerts handled this week. Check your feed."
     elif avg_minutes and avg_minutes < 30:
-        weekly_summary = f"{week_count} alerts handled this week with {avg_minutes}min avg response. Sharp."
+        weekly_summary = (
+            f"{week_count} alerts handled this week with {avg_minutes}min avg response. Sharp."
+        )
     else:
         weekly_summary = f"{week_count} alerts handled this week. Keep it up."
 
@@ -513,18 +583,15 @@ async def score(
 # Coach — learn from what you just handled
 # ---------------------------------------------------------------------------
 
+
 @router.get("/coach/{alert_id}", response_model=CoachResponse)
 async def coach(
     alert_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> CoachResponse:
     """Get a micro-lesson about an alert you just handled."""
 
-    stmt = (
-        select(Alert)
-        .options(selectinload(Alert.disposition))
-        .where(Alert.id == alert_id)
-    )
+    stmt = select(Alert).options(selectinload(Alert.disposition)).where(Alert.id == alert_id)
     result = await session.execute(stmt)
     alert = result.scalar_one_or_none()
 
@@ -532,33 +599,34 @@ async def coach(
         raise HTTPException(status_code=404, detail="Alert not found")
 
     llm = alert.llm_triage or {}
-    severity = alert.severity.value if isinstance(alert.severity, Severity) else alert.severity
+    alert.severity.value if isinstance(alert.severity, Severity) else alert.severity
     controls = alert.control_tags or []
 
     # Build lesson based on alert type and LLM analysis
     explanation = llm.get("explanation", "")
     benign = llm.get("benign_explanations", [])
-    actions = llm.get("recommended_actions", [])
+    llm.get("recommended_actions", [])
 
     # Determine attack category from rule description
     desc_lower = (alert.rule_description or "").lower()
     if any(w in desc_lower for w in ["brute", "authentication", "login", "password"]):
-        category = "Credential Attack"
         lesson_title = "Understanding Credential Attacks"
         lesson_body = (
             f"This alert (Rule {alert.rule_id}) detected a potential credential attack on "
             f"{alert.agent_name or 'a system'}. "
             f"{explanation} "
             f"Credential attacks are among the most common initial access techniques. "
-            f"Attackers try common passwords, leaked credentials, or automated tools to gain access. "
-            f"Your response helps build the evidence trail that proves your organization monitors for and responds to these threats."
+            f"Attackers try common passwords, leaked credentials, "
+            f"or automated tools to gain access. "
+            f"Your response helps build the evidence trail that proves "
+            f"your organization monitors for and responds to these threats."
         )
         next_tip = "Check if MFA is enabled on all external-facing accounts."
     elif any(w in desc_lower for w in ["malware", "trojan", "virus", "ransomware"]):
-        category = "Malware"
         lesson_title = "Malware Detection and Response"
         lesson_body = (
-            f"Rule {alert.rule_id} flagged potential malware activity on {alert.agent_name or 'a system'}. "
+            f"Rule {alert.rule_id} flagged potential malware activity "
+            f"on {alert.agent_name or 'a system'}. "
             f"{explanation} "
             f"Early detection is critical — the faster you identify and contain malware, "
             f"the less damage it can do. Your triage of this alert is evidence of your "
@@ -566,7 +634,6 @@ async def coach(
         )
         next_tip = "Verify endpoint protection is active on the affected host."
     elif any(w in desc_lower for w in ["file", "integrity", "modified", "changed"]):
-        category = "File Integrity"
         lesson_title = "File Integrity Monitoring"
         lesson_body = (
             f"This alert detected a file change on {alert.agent_name or 'a system'}. "
@@ -577,12 +644,12 @@ async def coach(
         )
         next_tip = "Review if any maintenance windows were scheduled for this host."
     else:
-        category = "Security Event"
         lesson_title = f"Security Event: {alert.rule_description[:60]}"
         lesson_body = (
             f"Rule {alert.rule_id} on {alert.agent_name or 'a system'}: {explanation} "
             f"Every alert you review strengthens your security posture. "
-            f"The evidence chain records your response, building compliance documentation automatically."
+            f"The evidence chain records your response, building "
+            f"compliance documentation automatically."
         )
         next_tip = "Review related alerts from the same host in the investigation tab."
 
@@ -652,9 +719,9 @@ class TicketCloseOut(BaseModel):
 
 @router.get("/tickets", response_model=list[TicketOut])
 async def list_tickets(
-    status: str = Query(default="open"),
-    analyst: str = Query(default=""),
-    session: AsyncSession = Depends(get_session),
+    status: str = Query(default="open"),  # noqa: B008
+    analyst: str = Query(default=""),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> list[TicketOut]:
     """List tickets, optionally filtered by status and analyst."""
     stmt = select(Ticket).order_by(Ticket.created_at.desc())
@@ -676,7 +743,7 @@ async def list_tickets(
 async def close_ticket(
     ticket_id: uuid.UUID,
     body: TicketCloseIn,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> TicketCloseOut:
     """Close a ticket and award XP based on severity."""
     ticket = await session.get(Ticket, ticket_id)
@@ -711,10 +778,11 @@ async def close_ticket(
 @router.get("/tickets/{ticket_id}", response_model=TicketDetailOut)
 async def get_ticket(
     ticket_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> TicketDetailOut:
     """Get full ticket detail including linked alert data."""
     from sqlalchemy.orm import selectinload
+
     stmt = select(Ticket).options(selectinload(Ticket.alert)).where(Ticket.id == ticket_id)
     result = await session.execute(stmt)
     ticket = result.scalar_one_or_none()
@@ -728,7 +796,9 @@ async def get_ticket(
         alert_rule_description=alert.rule_description if alert else None,
         alert_agent_name=alert.agent_name if alert else None,
         alert_llm_explanation=(alert.llm_triage or {}).get("explanation") if alert else None,
-        alert_recommended_actions=(alert.llm_triage or {}).get("recommended_actions", []) if alert else [],
+        alert_recommended_actions=(alert.llm_triage or {}).get("recommended_actions", [])
+        if alert
+        else [],
         alert_enrichment=alert.enrichment if alert else None,
     )
 
@@ -744,7 +814,7 @@ class TicketUpdateIn(BaseModel):
 async def update_ticket(
     ticket_id: uuid.UUID,
     body: TicketUpdateIn,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Update ticket fields."""
     ticket = await session.get(Ticket, ticket_id)
@@ -765,8 +835,8 @@ async def update_ticket(
 @router.patch("/tickets/{ticket_id}/assign")
 async def assign_ticket(
     ticket_id: uuid.UUID,
-    analyst: str = Query(...),
-    session: AsyncSession = Depends(get_session),
+    analyst: str = Query(...),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Reassign a ticket."""
     ticket = await session.get(Ticket, ticket_id)
@@ -812,8 +882,8 @@ async def get_tol():
 @router.put("/tolerance", response_model=ToleranceOut)
 async def set_tol(
     body: ToleranceIn,
-    session: AsyncSession = Depends(get_session),
-    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+    user: User = Depends(get_current_user),  # noqa: B008
 ):
     # Changing the global auto-dismiss posture is an audited, attributable event.
     level = await set_tolerance_audited(body.level, session=session, actor=user.email)
@@ -841,7 +911,7 @@ class AutoTriageOut(BaseModel):
 
 @router.post("/auto-triage", response_model=AutoTriageOut)
 async def auto_triage(
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> AutoTriageOut:
     """Run auto-disposition on all existing undispositioned alerts."""
 
@@ -870,12 +940,15 @@ async def auto_triage(
                     tickets_created += 1
 
     # Count remaining
-    remaining = await session.scalar(
-        select(func.count())
-        .select_from(Alert)
-        .outerjoin(AlertDisposition)
-        .where(AlertDisposition.id.is_(None))
-    ) or 0
+    remaining = (
+        await session.scalar(
+            select(func.count())
+            .select_from(Alert)
+            .outerjoin(AlertDisposition)
+            .where(AlertDisposition.id.is_(None))
+        )
+        or 0
+    )
 
     return AutoTriageOut(
         processed=len(alerts),
@@ -900,6 +973,7 @@ class ReevalOut(BaseModel):
 async def trigger_reeval() -> ReevalOut:
     """Manually trigger re-evaluation of acknowledged alerts."""
     from kahu.services.triage.reeval import run_reeval_cycle
+
     stats = await run_reeval_cycle()
     return ReevalOut(**stats)
 

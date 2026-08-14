@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,16 +16,18 @@ from kahu.services.reporting.data import (
 
 log = logging.getLogger("kahu.reporting.generator")
 
-EXECUTIVE_SYSTEM = """You are Kahu, writing an executive security briefing for non-technical leadership.
-
-Rules:
-- Lead with risk posture: are things getting better or worse?
-- Use plain language — no jargon, no acronyms without explanation.
-- Quantify: use the numbers provided. Don't round excessively.
-- Highlight what was handled (dispositioned) vs what needs attention (pending).
-- If there are critical findings, explain the business impact in one sentence.
-- Keep it to 2-4 short paragraphs. Executives skim.
-- End with 1-2 concrete recommendations, not vague advice."""
+EXECUTIVE_SYSTEM = (
+    "You are Kahu, writing an executive security briefing"
+    " for non-technical leadership.\n\n"
+    "Rules:\n"
+    "- Lead with risk posture: are things getting better or worse?\n"
+    "- Use plain language — no jargon, no acronyms without explanation.\n"
+    "- Quantify: use the numbers provided. Don't round excessively.\n"
+    "- Highlight what was handled (dispositioned) vs what needs attention (pending).\n"
+    "- If there are critical findings, explain the business impact in one sentence.\n"
+    "- Keep it to 2-4 short paragraphs. Executives skim.\n"
+    "- End with 1-2 concrete recommendations, not vague advice."
+)
 
 INCIDENT_SYSTEM = """You are Kahu, writing an incident report for the security operations team.
 
@@ -56,36 +58,34 @@ async def generate_executive_report(
     until: datetime | None = None,
 ) -> dict:
     """Generate an LLM-assisted executive summary report."""
-    until = until or datetime.now(timezone.utc)
+    until = until or datetime.now(UTC)
     data = await get_alert_summary(session, since, until)
 
     prompt = f"""Security operations data for the reporting period:
 
-Total alerts: {data['total_alerts']}
-By severity: {data['by_severity']}
-Disposition rate: {data['disposition_rate']}%
-Pending review: {data['pending']}
-Dispositioned: {data['disposed']}
-Disposition breakdown: {data['by_disposition']}
+Total alerts: {data["total_alerts"]}
+By severity: {data["by_severity"]}
+Disposition rate: {data["disposition_rate"]}%
+Pending review: {data["pending"]}
+Dispositioned: {data["disposed"]}
+Disposition breakdown: {data["by_disposition"]}
 
 Top triggered rules:
-{_format_top_items(data['top_rules'], 'rule_id', 'description', 'count')}
+{_format_top_items(data["top_rules"], "rule_id", "description", "count")}
 
 Top source IPs:
-{_format_top_items(data['top_source_ips'], 'ip', count_key='count')}
+{_format_top_items(data["top_source_ips"], "ip", count_key="count")}
 
 Most targeted hosts:
-{_format_top_items(data['top_hosts'], 'host', count_key='count')}
+{_format_top_items(data["top_hosts"], "host", count_key="count")}
 
 Write the executive briefing."""
 
-    narrative = await _generate_or_fallback(
-        prompt, EXECUTIVE_SYSTEM, _executive_fallback(data)
-    )
+    narrative = await _generate_or_fallback(prompt, EXECUTIVE_SYSTEM, _executive_fallback(data))
 
     return {
         "report_type": "executive",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "period": data["period"],
         "narrative": narrative["text"],
         "data": data,
@@ -115,12 +115,12 @@ async def generate_incident_report(
 
     prompt = f"""Incident data:
 
-Title: {title or 'Security Incident'}
-Overall severity: {data['overall_severity']}
-Alert count: {data['alert_count']}
-Time span: {data['time_range']['first']} to {data['time_range']['last']}
-Affected hosts: {', '.join(data['affected_hosts']) or 'unknown'}
-Involved IPs: {', '.join(data['involved_ips']) or 'none identified'}
+Title: {title or "Security Incident"}
+Overall severity: {data["overall_severity"]}
+Alert count: {data["alert_count"]}
+Time span: {data["time_range"]["first"]} to {data["time_range"]["last"]}
+Affected hosts: {", ".join(data["affected_hosts"]) or "unknown"}
+Involved IPs: {", ".join(data["involved_ips"]) or "none identified"}
 
 Event timeline:
 {timeline_text}
@@ -133,7 +133,7 @@ Write the incident report."""
 
     return {
         "report_type": "incident",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "title": title or "Security Incident",
         "narrative": narrative["text"],
         "data": data,
@@ -147,25 +147,23 @@ async def generate_evidence_package(
     until: datetime | None = None,
 ) -> dict:
     """Generate a compliance evidence package with narrative summary."""
-    until = until or datetime.now(timezone.utc)
+    until = until or datetime.now(UTC)
     data = await get_evidence_summary(session, since, until)
 
     prompt = f"""Compliance evidence data:
 
-Period: {data['period']['since']} to {data['period']['until']}
-Total evidence records: {data['total_records']}
-By event type: {data['by_event_type']}
-Hash chain integrity: {'INTACT' if data['chain_intact'] else 'BROKEN — EVIDENCE TAMPERING POSSIBLE'}
+Period: {data["period"]["since"]} to {data["period"]["until"]}
+Total evidence records: {data["total_records"]}
+By event type: {data["by_event_type"]}
+Hash chain integrity: {"INTACT" if data["chain_intact"] else "BROKEN — EVIDENCE TAMPERING POSSIBLE"}
 
 Write the compliance evidence summary."""
 
-    narrative = await _generate_or_fallback(
-        prompt, EVIDENCE_SYSTEM, _evidence_fallback(data)
-    )
+    narrative = await _generate_or_fallback(prompt, EVIDENCE_SYSTEM, _evidence_fallback(data))
 
     return {
         "report_type": "evidence_package",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "period": data["period"],
         "narrative": narrative["text"],
         "chain_intact": data["chain_intact"],
@@ -178,9 +176,7 @@ Write the compliance evidence summary."""
     }
 
 
-async def _generate_or_fallback(
-    prompt: str, system: str, fallback: str
-) -> dict:
+async def _generate_or_fallback(prompt: str, system: str, fallback: str) -> dict:
     """Try LLM generation, fall back to deterministic text."""
     ollama = OllamaClient()
     try:
@@ -259,6 +255,7 @@ def _evidence_fallback(data: dict) -> str:
     chain_status = "intact" if data["chain_intact"] else "BROKEN"
     return (
         f"Evidence package covering {data['period']['since']} to {data['period']['until']}. "
-        f"{data['total_records']} records generated across {len(data['by_event_type'])} event types. "
+        f"{data['total_records']} records generated across "
+        f"{len(data['by_event_type'])} event types. "
         f"Hash chain integrity: {chain_status}."
     )

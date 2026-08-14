@@ -2,22 +2,22 @@
 
 import enum
 import uuid
-from typing import Optional
 
-from sqlalchemy import Enum as SAEnum, ForeignKey, String, Text
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from kahu.models.base import Base, TimestampMixin, UUIDPrimaryKey
 
 
-class TicketStatus(str, enum.Enum):
+class TicketStatus(enum.StrEnum):
     OPEN = "open"
     IN_PROGRESS = "in_progress"
     CLOSED = "closed"
 
 
-class TicketType(str, enum.Enum):
-    INCIDENT = "incident"       # Confirmed true positive — respond & remediate
+class TicketType(enum.StrEnum):
+    INCIDENT = "incident"  # Confirmed true positive — respond & remediate
     INVESTIGATION = "investigation"  # Escalated — needs deeper analysis first
 
 
@@ -27,15 +27,17 @@ class Ticket(Base, UUIDPrimaryKey, TimestampMixin):
     alert_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("alerts.id"), unique=True)
     title: Mapped[str] = mapped_column(String(512))
     severity: Mapped[str] = mapped_column(String(20))
-    ticket_type: Mapped[Optional[str]] = mapped_column(
-        String(20), default=TicketType.INCIDENT.value, nullable=True,
+    ticket_type: Mapped[str | None] = mapped_column(
+        String(20),
+        default=TicketType.INCIDENT.value,
+        nullable=True,
     )
     status: Mapped[TicketStatus] = mapped_column(
         SAEnum(TicketStatus, name="ticket_status"),
         default=TicketStatus.OPEN,
     )
     assigned_to: Mapped[str] = mapped_column(String(255))
-    closed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    resolution_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    closed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    resolution_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     alert: Mapped["Alert"] = relationship()  # noqa: F821

@@ -93,8 +93,14 @@ class RiskConfig:
     @classmethod
     def from_dict(cls, d: dict) -> RiskConfig:
         return cls(
-            geo_asn_risk=d.get("geo_asn_risk", {"low": 1.0, "medium": 5.0, "high": 25.0}),
-            asset_criticality=d.get("asset_criticality", {"standard": 1.0, "elevated": 3.0, "critical": 10.0}),
+            geo_asn_risk=d.get(
+                "geo_asn_risk",
+                {"low": 1.0, "medium": 5.0, "high": 25.0},
+            ),
+            asset_criticality=d.get(
+                "asset_criticality",
+                {"standard": 1.0, "elevated": 3.0, "critical": 10.0},
+            ),
             misp_indicator_overlap=d.get("misp_indicator_overlap", 50.0),
             protocol_class=d.get("protocol_class", {}),
         )

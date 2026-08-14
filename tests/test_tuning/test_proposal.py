@@ -2,8 +2,6 @@
 
 import copy
 
-import pytest
-
 from kahu_tuning.proposal import (
     add_narration,
     build_evidence_block,

@@ -1,8 +1,6 @@
 """Tests for proposal expiry enforcement."""
 
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from kahu_tuner.expiry import (
     build_rejustification_context,
@@ -13,11 +11,11 @@ from kahu_tuner.expiry import (
 
 class TestIsExpired:
     def test_not_expired(self):
-        future = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        future = (datetime.now(UTC) + timedelta(days=30)).isoformat()
         assert is_expired({"expiry": future}) is False
 
     def test_expired(self):
-        past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        past = (datetime.now(UTC) - timedelta(days=1)).isoformat()
         assert is_expired({"expiry": past}) is True
 
     def test_missing_expiry(self):
@@ -25,13 +23,13 @@ class TestIsExpired:
 
     def test_explicit_now(self):
         """Time-travel: proposal created 100 days ago, expired at 90 days."""
-        created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        created = datetime(2026, 1, 1, tzinfo=UTC)
         expiry = (created + timedelta(days=90)).isoformat()
         now = created + timedelta(days=100)
         assert is_expired({"expiry": expiry}, now=now) is True
 
     def test_not_yet_expired_with_now(self):
-        created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        created = datetime(2026, 1, 1, tzinfo=UTC)
         expiry = (created + timedelta(days=90)).isoformat()
         now = created + timedelta(days=50)
         assert is_expired({"expiry": expiry}, now=now) is False
@@ -39,8 +37,8 @@ class TestIsExpired:
 
 class TestFindExpired:
     def test_filters_applied_expired(self):
-        past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
-        future = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        past = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+        future = (datetime.now(UTC) + timedelta(days=30)).isoformat()
         proposals = [
             {"proposal_id": "1", "status": "applied", "expiry": past},
             {"proposal_id": "2", "status": "applied", "expiry": future},
@@ -52,7 +50,7 @@ class TestFindExpired:
 
     def test_time_travel(self):
         """Acceptance: time-travel test finds expired proposals."""
-        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        base = datetime(2026, 1, 1, tzinfo=UTC)
         proposals = [
             {
                 "proposal_id": "x",

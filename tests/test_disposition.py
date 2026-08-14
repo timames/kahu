@@ -36,7 +36,9 @@ def test_evidence_hash_changes_with_payload():
     content1 = json.dumps({**base, "payload": {"id": "1"}}, sort_keys=True)
     content2 = json.dumps({**base, "payload": {"id": "2"}}, sort_keys=True)
 
-    assert hashlib.sha256(content1.encode()).hexdigest() != hashlib.sha256(content2.encode()).hexdigest()
+    hash1 = hashlib.sha256(content1.encode()).hexdigest()
+    hash2 = hashlib.sha256(content2.encode()).hexdigest()
+    assert hash1 != hash2
 
 
 def test_evidence_chain_links():

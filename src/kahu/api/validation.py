@@ -7,11 +7,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import desc, select, func
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.db import get_session
-from kahu.models.validation import ValidationRound, ValidationSample, ValidationVerdict
+from kahu.models.validation import ValidationRound, ValidationVerdict
 from kahu.services.validation import get_latest_round, get_round_samples, run_validation_round
 
 router = APIRouter()
@@ -20,6 +20,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
+
 
 class SampleOut(BaseModel):
     id: uuid.UUID
@@ -70,10 +71,11 @@ class RoundListResponse(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 
+
 @router.post("/rounds", response_model=RoundOut)
 async def trigger_validation_round(
-    sample_size: int = Query(13, ge=1, le=100),
-    session: AsyncSession = Depends(get_session),
+    sample_size: int = Query(13, ge=1, le=100),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Trigger a validation round — randomly sample endpoints and check them."""
     vr = await run_validation_round(session, sample_size=sample_size)
@@ -82,15 +84,13 @@ async def trigger_validation_round(
 
 @router.get("/rounds", response_model=RoundListResponse)
 async def list_rounds(
-    offset: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    session: AsyncSession = Depends(get_session),
+    offset: int = Query(0, ge=0),  # noqa: B008
+    limit: int = Query(20, ge=1, le=100),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """List validation rounds, most recent first."""
     stmt = select(ValidationRound).order_by(desc(ValidationRound.started_at))
-    total = await session.scalar(
-        select(func.count()).select_from(stmt.subquery())
-    ) or 0
+    total = await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     result = await session.execute(stmt.offset(offset).limit(limit))
     rounds = result.scalars().all()
     return RoundListResponse(
@@ -113,7 +113,7 @@ async def list_rounds(
 
 
 @router.get("/rounds/latest", response_model=RoundOut | None)
-async def latest_round(session: AsyncSession = Depends(get_session)):
+async def latest_round(session: AsyncSession = Depends(get_session)):  # noqa: B008
     """Get the most recent validation round."""
     vr = await get_latest_round(session)
     if vr is None:
@@ -124,7 +124,7 @@ async def latest_round(session: AsyncSession = Depends(get_session)):
 @router.get("/rounds/{round_id}", response_model=RoundOut)
 async def get_round(
     round_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Get full detail of a validation round."""
     vr = await session.get(ValidationRound, round_id)
@@ -136,7 +136,7 @@ async def get_round(
 @router.get("/rounds/{round_id}/samples", response_model=list[SampleOut])
 async def get_samples(
     round_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ):
     """Get all endpoint samples for a validation round."""
     samples = await get_round_samples(session, str(round_id))
@@ -157,7 +157,7 @@ async def get_samples(
 
 
 @router.get("/drift")
-async def check_drift(session: AsyncSession = Depends(get_session)):
+async def check_drift(session: AsyncSession = Depends(get_session)):  # noqa: B008
     """Quick check: has the latest validation round detected drift?"""
     vr = await get_latest_round(session)
     if vr is None:

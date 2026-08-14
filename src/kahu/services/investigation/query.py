@@ -13,7 +13,6 @@ from kahu.services.investigation.context import (
     parse_question,
 )
 from kahu.services.investigation.session import (
-    InvestigationSession,
     get_or_create_session,
 )
 
@@ -122,27 +121,31 @@ async def get_timeline(
     # Merge and sort by time
     all_events = []
     for e in pg_events:
-        all_events.append({
-            "time": e.get("created_at", ""),
-            "source": "triaged",
-            "severity": e.get("severity", ""),
-            "rule_id": e.get("rule_id", ""),
-            "description": e.get("rule_description", ""),
-            "agent": e.get("agent_name", ""),
-            "src_ip": e.get("source_ip", ""),
-            "verdict": e.get("verdict"),
-        })
+        all_events.append(
+            {
+                "time": e.get("created_at", ""),
+                "source": "triaged",
+                "severity": e.get("severity", ""),
+                "rule_id": e.get("rule_id", ""),
+                "description": e.get("rule_description", ""),
+                "agent": e.get("agent_name", ""),
+                "src_ip": e.get("source_ip", ""),
+                "verdict": e.get("verdict"),
+            }
+        )
     for e in indexer_events:
-        all_events.append({
-            "time": e.get("timestamp", ""),
-            "source": "raw_log",
-            "severity_level": e.get("rule_level", 0),
-            "rule_id": e.get("rule_id", ""),
-            "description": e.get("rule_description", ""),
-            "agent": e.get("agent_name", ""),
-            "src_ip": e.get("source_ip", ""),
-            "log_excerpt": e.get("full_log", ""),
-        })
+        all_events.append(
+            {
+                "time": e.get("timestamp", ""),
+                "source": "raw_log",
+                "severity_level": e.get("rule_level", 0),
+                "rule_id": e.get("rule_id", ""),
+                "description": e.get("rule_description", ""),
+                "agent": e.get("agent_name", ""),
+                "src_ip": e.get("source_ip", ""),
+                "log_excerpt": e.get("full_log", ""),
+            }
+        )
 
     all_events.sort(key=lambda x: x.get("time", ""), reverse=True)
 

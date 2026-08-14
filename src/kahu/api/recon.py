@@ -71,7 +71,7 @@ async def dns_lookup(body: DnsLookupRequest) -> DnsLookupResponse:
         return_exceptions=True,
     )
 
-    for rtype, result in zip(requested, results):
+    for rtype, result in zip(requested, results, strict=False):
         if isinstance(result, Exception):
             errors[rtype] = str(result)
         else:
@@ -87,12 +87,15 @@ async def reverse_lookup(body: ReverseLookupRequest) -> ReverseLookupResponse:
     try:
         rev_name = dns.reversename.from_address(ip)
     except Exception:
-        raise HTTPException(400, "Invalid IP address")
+        raise HTTPException(400, "Invalid IP address") from None
 
     hostnames: list[str] = []
     try:
         answers = await asyncio.to_thread(
-            dns.resolver.resolve, rev_name, "PTR", lifetime=TIMEOUT,
+            dns.resolver.resolve,
+            rev_name,
+            "PTR",
+            lifetime=TIMEOUT,
         )
         hostnames = [str(rdata.target).rstrip(".") for rdata in answers]
     except dns.resolver.NXDOMAIN:
@@ -107,16 +110,19 @@ async def _resolve(domain: str, rtype: str) -> list[DnsRecord]:
     """Resolve a single record type for a domain."""
     try:
         answers = await asyncio.to_thread(
-            dns.resolver.resolve, domain, rtype, lifetime=TIMEOUT,
+            dns.resolver.resolve,
+            domain,
+            rtype,
+            lifetime=TIMEOUT,
         )
     except dns.resolver.NoAnswer:
         return []
     except dns.resolver.NXDOMAIN:
-        raise ValueError(f"Domain {domain} does not exist")
+        raise ValueError(f"Domain {domain} does not exist") from None
     except dns.resolver.NoNameservers:
-        raise ValueError("No nameservers available")
+        raise ValueError("No nameservers available") from None
     except dns.exception.Timeout:
-        raise ValueError("DNS query timed out")
+        raise ValueError("DNS query timed out") from None
 
     records: list[DnsRecord] = []
     ttl = int(answers.rrset.ttl) if answers.rrset else 0
@@ -147,7 +153,12 @@ async def _resolve(domain: str, rtype: str) -> list[DnsRecord]:
 
 
 class IpScanRequest(BaseModel):
-    target: str = Field(..., min_length=1, max_length=100, description="IP, CIDR, or range (e.g. 192.168.1.0/24)")
+    target: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="IP, CIDR, or range (e.g. 192.168.1.0/24)",
+    )
     timeout_ms: int = Field(default=1000, ge=100, le=5000)
 
 
@@ -171,10 +182,12 @@ async def ip_scan(body: IpScanRequest) -> IpScanResponse:
     try:
         hosts = _parse_targets(body.target)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
 
     if len(hosts) > MAX_HOSTS:
-        raise HTTPException(400, f"Too many hosts ({len(hosts)}). Max is {MAX_HOSTS} (use /24 or smaller).")
+        raise HTTPException(
+            400, f"Too many hosts ({len(hosts)}). Max is {MAX_HOSTS} (use /24 or smaller)."
+        )
 
     sem = asyncio.Semaphore(PING_CONCURRENCY)
     results = await asyncio.gather(*[_ping_host(str(h), body.timeout_ms, sem) for h in hosts])
@@ -210,7 +223,7 @@ async def _ping_host(ip: str, timeout_ms: int, sem: asyncio.Semaphore) -> HostRe
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_ms / 1000 + 2)
             alive = proc.returncode == 0
             latency = _parse_ping_latency(stdout.decode(errors="replace")) if alive else None
-        except (asyncio.TimeoutError, OSError):
+        except (TimeoutError, OSError):
             alive = False
             latency = None
 
@@ -218,12 +231,11 @@ async def _ping_host(ip: str, timeout_ms: int, sem: asyncio.Semaphore) -> HostRe
         if alive:
             try:
                 import socket
-                hostname = await asyncio.to_thread(
-                    lambda: socket.getfqdn(ip)
-                )
+
+                hostname = await asyncio.to_thread(lambda: socket.getfqdn(ip))
                 if hostname == ip:
                     hostname = ""
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
         return HostResult(ip=ip, alive=alive, hostname=hostname, latency_ms=latency)
@@ -232,6 +244,7 @@ async def _ping_host(ip: str, timeout_ms: int, sem: asyncio.Semaphore) -> HostRe
 def _parse_ping_latency(output: str) -> float | None:
     """Extract average latency from ping output."""
     import re
+
     # Windows: Average = 1ms  |  Linux: min/avg/max = 0.5/1.0/1.5
     m = re.search(r"Average\s*=\s*(\d+)", output)
     if m:
@@ -250,7 +263,7 @@ def _parse_targets(target: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Ad
         try:
             network = ipaddress.ip_network(target, strict=False)
         except ValueError:
-            raise ValueError(f"Invalid CIDR: {target}")
+            raise ValueError(f"Invalid CIDR: {target}") from None
         return list(network.hosts()) or [network.network_address]
 
     # Range: 192.168.1.1-50
@@ -269,36 +282,88 @@ def _parse_targets(target: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Ad
                     for i in range(start_octet, end_octet + 1)
                 ]
             except (ValueError, IndexError):
-                raise ValueError(f"Invalid range: {target}")
+                raise ValueError(f"Invalid range: {target}") from None
 
     # Single IP
     try:
         return [ipaddress.ip_address(target)]
     except ValueError:
-        raise ValueError(f"Invalid target: {target}. Use an IP, CIDR (e.g. 192.168.1.0/24), or range (e.g. 192.168.1.1-50).")
+        raise ValueError(
+            f"Invalid target: {target}. Use an IP, CIDR "
+            f"(e.g. 192.168.1.0/24), or range (e.g. 192.168.1.1-50)."
+        ) from None
 
 
 # ── Port Scanner ─────────────────────────────────────────
 
 
 COMMON_PORTS = [
-    21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 993, 995,
-    1433, 1521, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 8888, 9200, 27017,
+    21,
+    22,
+    23,
+    25,
+    53,
+    80,
+    110,
+    111,
+    135,
+    139,
+    143,
+    443,
+    445,
+    993,
+    995,
+    1433,
+    1521,
+    3306,
+    3389,
+    5432,
+    5900,
+    6379,
+    8080,
+    8443,
+    8888,
+    9200,
+    27017,
 ]
 
 PORT_NAMES = {
-    21: "FTP", 22: "SSH", 23: "Telnet", 25: "SMTP", 53: "DNS",
-    80: "HTTP", 110: "POP3", 111: "RPCBind", 135: "MSRPC", 139: "NetBIOS",
-    143: "IMAP", 443: "HTTPS", 445: "SMB", 993: "IMAPS", 995: "POP3S",
-    1433: "MSSQL", 1521: "Oracle", 3306: "MySQL", 3389: "RDP",
-    5432: "PostgreSQL", 5900: "VNC", 6379: "Redis", 8080: "HTTP-Alt",
-    8443: "HTTPS-Alt", 8888: "HTTP-Alt", 9200: "Elasticsearch", 27017: "MongoDB",
+    21: "FTP",
+    22: "SSH",
+    23: "Telnet",
+    25: "SMTP",
+    53: "DNS",
+    80: "HTTP",
+    110: "POP3",
+    111: "RPCBind",
+    135: "MSRPC",
+    139: "NetBIOS",
+    143: "IMAP",
+    443: "HTTPS",
+    445: "SMB",
+    993: "IMAPS",
+    995: "POP3S",
+    1433: "MSSQL",
+    1521: "Oracle",
+    3306: "MySQL",
+    3389: "RDP",
+    5432: "PostgreSQL",
+    5900: "VNC",
+    6379: "Redis",
+    8080: "HTTP-Alt",
+    8443: "HTTPS-Alt",
+    8888: "HTTP-Alt",
+    9200: "Elasticsearch",
+    27017: "MongoDB",
 }
 
 
 class PortScanRequest(BaseModel):
     target: str = Field(..., min_length=1, max_length=100)
-    ports: str = Field(default="common", description="'common', 'all' (1-1024), or custom e.g. '22,80,443' or '1-100'")
+    ports: str = Field(
+        default="common",
+        description="'common', 'all' (1-1024), or custom e.g. '22,80,443' or '1-100'",
+    )
     timeout_ms: int = Field(default=1500, ge=100, le=10000)
 
 
@@ -324,10 +389,11 @@ async def port_scan(body: PortScanRequest) -> PortScanResponse:
     except ValueError:
         # Allow hostnames too — resolve first
         import socket
+
         try:
             target = await asyncio.to_thread(socket.gethostbyname, target)
         except socket.gaierror:
-            raise HTTPException(400, f"Cannot resolve hostname: {body.target}")
+            raise HTTPException(400, f"Cannot resolve hostname: {body.target}") from None
 
     ports = _parse_ports(body.ports)
     if len(ports) > MAX_PORTS:
@@ -360,7 +426,7 @@ async def _check_port(ip: str, port: int, timeout: float, sem: asyncio.Semaphore
             writer.close()
             await writer.wait_closed()
             return PortResult(port=port, state="open", service=PORT_NAMES.get(port, ""))
-        except (asyncio.TimeoutError, OSError, ConnectionRefusedError):
+        except (TimeoutError, OSError, ConnectionRefusedError):
             return PortResult(port=port, state="closed", service=PORT_NAMES.get(port, ""))
 
 
@@ -400,5 +466,6 @@ def _is_valid_domain(domain: str) -> bool:
     if len(parts) < 2:
         return False
     import re
+
     label_re = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
     return all(label_re.match(p) for p in parts)

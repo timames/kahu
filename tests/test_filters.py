@@ -6,7 +6,10 @@ from kahu.services.triage.filters import (
 )
 
 
-def _make_alert(rule_id: str = "200", level: int = 7, agent: str = "host1", groups: list | None = None) -> dict:
+def _make_alert(
+    rule_id: str = "200", level: int = 7,
+    agent: str = "host1", groups: list | None = None,
+) -> dict:
     return {
         "rule": {
             "id": rule_id,

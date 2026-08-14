@@ -28,7 +28,7 @@ class GreenboneClient:
     # ── Auth ──────────────────────────────────────────────────
 
     async def authenticate(self) -> None:
-        async with httpx.AsyncClient(verify=False, timeout=15) as client:
+        async with httpx.AsyncClient(verify=False, timeout=15) as client:  # noqa: S501
             resp = await client.post(
                 f"{self.base_url}/auth/login",
                 json={"username": self.user, "password": self.password},
@@ -55,7 +55,7 @@ class GreenboneClient:
     async def health(self) -> dict:
         """Check if GSA is reachable and return version info."""
         try:
-            async with httpx.AsyncClient(verify=False, timeout=5) as client:
+            async with httpx.AsyncClient(verify=False, timeout=5) as client:  # noqa: S501
                 resp = await client.get(f"{self.base_url}/login")
                 if resp.status_code == 200:
                     return {"online": True, "scanner": "greenbone"}
@@ -69,7 +69,7 @@ class GreenboneClient:
         """Send a GMP command via the /gmp endpoint."""
         await self._ensure_auth()
         params = {"cmd": cmd, **attrs}
-        async with httpx.AsyncClient(verify=False, timeout=30) as client:
+        async with httpx.AsyncClient(verify=False, timeout=30) as client:  # noqa: S501
             resp = await client.get(
                 f"{self.base_url}/gmp",
                 params=params,
@@ -82,9 +82,9 @@ class GreenboneClient:
                 data = resp.json()
                 xml_str = data.get("data", data.get("response", ""))
                 if isinstance(xml_str, str) and xml_str.strip().startswith("<"):
-                    return ET.fromstring(xml_str)
+                    return ET.fromstring(xml_str)  # noqa: S314
                 return ET.Element("response")
-            return ET.fromstring(resp.text)
+            return ET.fromstring(resp.text)  # noqa: S314
 
     async def _omp_request(self, cmd: str, params: dict | None = None) -> dict:
         """Simplified request that tries REST endpoints first, falls back to GMP XML."""
@@ -92,7 +92,7 @@ class GreenboneClient:
         url_params = {"cmd": cmd}
         if params:
             url_params.update(params)
-        async with httpx.AsyncClient(verify=False, timeout=30) as client:
+        async with httpx.AsyncClient(verify=False, timeout=30) as client:  # noqa: S501
             resp = await client.get(
                 f"{self.base_url}/omp",
                 params=url_params,
@@ -116,12 +116,14 @@ class GreenboneClient:
             root = await self._gmp_command("get_targets")
             targets = []
             for t in root.iter("target"):
-                targets.append({
-                    "id": t.get("id", ""),
-                    "name": _text(t, "name"),
-                    "hosts": _text(t, "hosts"),
-                    "comment": _text(t, "comment"),
-                })
+                targets.append(
+                    {
+                        "id": t.get("id", ""),
+                        "name": _text(t, "name"),
+                        "hosts": _text(t, "hosts"),
+                        "comment": _text(t, "comment"),
+                    }
+                )
             return targets
         except Exception:
             log.debug("get_targets failed", exc_info=True)
@@ -147,13 +149,15 @@ class GreenboneClient:
             root = await self._gmp_command("get_configs")
             configs = []
             for c in root.iter("config"):
-                configs.append({
-                    "id": c.get("id", ""),
-                    "name": _text(c, "name"),
-                    "comment": _text(c, "comment"),
-                    "family_count": _text(c, "families/count"),
-                    "nvt_count": _text(c, "nvts/count"),
-                })
+                configs.append(
+                    {
+                        "id": c.get("id", ""),
+                        "name": _text(c, "name"),
+                        "comment": _text(c, "comment"),
+                        "family_count": _text(c, "families/count"),
+                        "nvt_count": _text(c, "nvts/count"),
+                    }
+                )
             return configs
         except Exception:
             log.debug("get_scan_configs failed", exc_info=True)
@@ -168,26 +172,30 @@ class GreenboneClient:
             tasks = []
             for t in root.iter("task"):
                 last_report = t.find("last_report/report")
-                tasks.append({
-                    "id": t.get("id", ""),
-                    "name": _text(t, "name"),
-                    "status": _text(t, "status"),
-                    "progress": _text(t, "progress"),
-                    "target_id": t.find("target").get("id", "") if t.find("target") is not None else "",
-                    "target_name": _text(t, "target/name"),
-                    "last_report_id": last_report.get("id", "") if last_report is not None else "",
-                    "severity": _text(t, "last_report/report/severity/full/filtered"),
-                    "result_count": _text(t, "result_count/full"),
-                    "comment": _text(t, "comment"),
-                })
+                tasks.append(
+                    {
+                        "id": t.get("id", ""),
+                        "name": _text(t, "name"),
+                        "status": _text(t, "status"),
+                        "progress": _text(t, "progress"),
+                        "target_id": t.find("target").get("id", "")
+                        if t.find("target") is not None
+                        else "",
+                        "target_name": _text(t, "target/name"),
+                        "last_report_id": last_report.get("id", "")
+                        if last_report is not None
+                        else "",
+                        "severity": _text(t, "last_report/report/severity/full/filtered"),
+                        "result_count": _text(t, "result_count/full"),
+                        "comment": _text(t, "comment"),
+                    }
+                )
             return tasks
         except Exception:
             log.debug("get_tasks failed", exc_info=True)
             return []
 
-    async def create_task(
-        self, name: str, target_id: str, scan_config_id: str = ""
-    ) -> dict:
+    async def create_task(self, name: str, target_id: str, scan_config_id: str = "") -> dict:
         """Create a scan task."""
         attrs = {"name": name, "target_id": target_id}
         if scan_config_id:
@@ -241,24 +249,28 @@ class GreenboneClient:
                 if sev < severity_min:
                     continue
                 nvt = r.find("nvt")
-                results.append({
-                    "id": r.get("id", ""),
-                    "name": _text(r, "name"),
-                    "host": _text(r, "host"),
-                    "port": _text(r, "port"),
-                    "severity": sev,
-                    "description": _text(r, "description"),
-                    "nvt": {
-                        "oid": nvt.get("oid", "") if nvt is not None else "",
-                        "name": _text(nvt, "name") if nvt is not None else "",
-                        "cve": _text(nvt, "cve") if nvt is not None else "",
-                        "solution": _text(nvt, "solution") if nvt is not None else "",
-                        "solution_type": _text(nvt, "solution_type") if nvt is not None else "",
-                        "family": _text(nvt, "family") if nvt is not None else "",
-                    },
-                    "task_id": r.find("task").get("id", "") if r.find("task") is not None else "",
-                    "qod": _text(r, "qod/value"),
-                })
+                results.append(
+                    {
+                        "id": r.get("id", ""),
+                        "name": _text(r, "name"),
+                        "host": _text(r, "host"),
+                        "port": _text(r, "port"),
+                        "severity": sev,
+                        "description": _text(r, "description"),
+                        "nvt": {
+                            "oid": nvt.get("oid", "") if nvt is not None else "",
+                            "name": _text(nvt, "name") if nvt is not None else "",
+                            "cve": _text(nvt, "cve") if nvt is not None else "",
+                            "solution": _text(nvt, "solution") if nvt is not None else "",
+                            "solution_type": _text(nvt, "solution_type") if nvt is not None else "",
+                            "family": _text(nvt, "family") if nvt is not None else "",
+                        },
+                        "task_id": r.find("task").get("id", "")
+                        if r.find("task") is not None
+                        else "",
+                        "qod": _text(r, "qod/value"),
+                    }
+                )
             results.sort(key=lambda x: x["severity"], reverse=True)
             return results
         except Exception:
@@ -274,15 +286,19 @@ class GreenboneClient:
             root = await self._gmp_command("get_reports", **attrs)
             reports = []
             for r in root.iter("report"):
-                reports.append({
-                    "id": r.get("id", ""),
-                    "task_id": r.find("task").get("id", "") if r.find("task") is not None else "",
-                    "timestamp": _text(r, "timestamp"),
-                    "scan_start": _text(r, "scan_start"),
-                    "scan_end": _text(r, "scan_end"),
-                    "result_count": _text(r, "result_count/full"),
-                    "severity": _text(r, "severity/full/filtered"),
-                })
+                reports.append(
+                    {
+                        "id": r.get("id", ""),
+                        "task_id": r.find("task").get("id", "")
+                        if r.find("task") is not None
+                        else "",
+                        "timestamp": _text(r, "timestamp"),
+                        "scan_start": _text(r, "scan_start"),
+                        "scan_end": _text(r, "scan_end"),
+                        "result_count": _text(r, "result_count/full"),
+                        "severity": _text(r, "severity/full/filtered"),
+                    }
+                )
             return reports
         except Exception:
             log.debug("get_reports failed", exc_info=True)
@@ -296,12 +312,14 @@ class GreenboneClient:
             root = await self._gmp_command("get_port_lists")
             port_lists = []
             for p in root.iter("port_list"):
-                port_lists.append({
-                    "id": p.get("id", ""),
-                    "name": _text(p, "name"),
-                    "port_count": _text(p, "port_count/all"),
-                    "comment": _text(p, "comment"),
-                })
+                port_lists.append(
+                    {
+                        "id": p.get("id", ""),
+                        "name": _text(p, "name"),
+                        "port_count": _text(p, "port_count/all"),
+                        "comment": _text(p, "comment"),
+                    }
+                )
             return port_lists
         except Exception:
             log.debug("get_port_lists failed", exc_info=True)
@@ -315,13 +333,15 @@ class GreenboneClient:
             root = await self._gmp_command("get_scanners")
             scanners = []
             for s in root.iter("scanner"):
-                scanners.append({
-                    "id": s.get("id", ""),
-                    "name": _text(s, "name"),
-                    "type": _text(s, "type"),
-                    "host": _text(s, "host"),
-                    "port": _text(s, "port"),
-                })
+                scanners.append(
+                    {
+                        "id": s.get("id", ""),
+                        "name": _text(s, "name"),
+                        "type": _text(s, "type"),
+                        "host": _text(s, "host"),
+                        "port": _text(s, "port"),
+                    }
+                )
             return scanners
         except Exception:
             log.debug("get_scanners failed", exc_info=True)
@@ -329,6 +349,7 @@ class GreenboneClient:
 
 
 # ── XML helpers ──────────────────────────────────────────────
+
 
 def _text(elem: ET.Element | None, path: str) -> str:
     """Safely extract text from an XML element path."""

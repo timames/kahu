@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from kahu_attest.bundle import build_attestation, build_pono_snapshot, sign_attestation
 from kahu_tuning.signing import generate_keypair
 
 try:
-    from fpdf import FPDF
+    from fpdf import FPDF  # noqa: F401
     HAS_FPDF = True
 except ImportError:
     HAS_FPDF = False

@@ -37,7 +37,7 @@ class TestHourlyProfile:
     def test_normalized_mean_one(self):
         """Profile multipliers average to 1.0."""
         import random
-        rng = random.Random(42)
+        rng = random.Random(42)  # noqa: S311
         hours = [rng.randint(0, 167) for _ in range(10000)]
         profile = estimate_hourly_profile(hours)
         mean = sum(profile) / 168

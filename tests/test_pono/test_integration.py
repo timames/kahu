@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from kahu.models.base import Base
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
+from kahu.models.base import Base
 from kahu.models.connectors import ConnectorInstance, ConnectorStatus
-from kahu.models.evidence import EvidenceRecord
 from kahu.models.pono import PonoSnapshot
 from kahu.services.pono import compute_and_persist, gather_inputs
 
@@ -143,7 +142,7 @@ class TestComputeAndPersist:
             session.add(_make_connector(ConnectorStatus.ACTIVE))
         await session.commit()
 
-        s1 = await compute_and_persist(session, trigger="manual")
+        await compute_and_persist(session, trigger="manual")
 
         # The drop detection compares against the previous snapshot.
         # Since inputs are the same, no drop should occur.

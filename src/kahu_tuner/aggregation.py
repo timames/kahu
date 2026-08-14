@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 
 def build_tuple_agg_query(
@@ -15,7 +15,7 @@ def build_tuple_agg_query(
     with hourly buckets over the specified window.
     """
     if now is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
     start = now - timedelta(hours=hours_back)
 
     return {
@@ -70,9 +70,7 @@ def parse_tuple_agg_response(response: dict) -> list[dict]:
     }
     """
     results = []
-    rule_buckets = (
-        response.get("aggregations", {}).get("by_rule", {}).get("buckets", [])
-    )
+    rule_buckets = response.get("aggregations", {}).get("by_rule", {}).get("buckets", [])
 
     for rule_b in rule_buckets:
         rule_id = str(rule_b["key"])
@@ -106,14 +104,16 @@ def parse_tuple_agg_response(response: dict) -> list[dict]:
                         except (ValueError, AttributeError):
                             hour_of_week_indices.append(0)
 
-                results.append({
-                    "rule_id": rule_id,
-                    "source_key": source_key,
-                    "asset_id": asset_id,
-                    "total_events": total,
-                    "hourly_counts": hourly_counts,
-                    "hour_of_week_indices": hour_of_week_indices,
-                })
+                results.append(
+                    {
+                        "rule_id": rule_id,
+                        "source_key": source_key,
+                        "asset_id": asset_id,
+                        "total_events": total,
+                        "hourly_counts": hourly_counts,
+                        "hour_of_week_indices": hour_of_week_indices,
+                    }
+                )
 
     return results
 

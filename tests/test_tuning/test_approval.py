@@ -1,6 +1,5 @@
 """Tests for level-gated approval logic."""
 
-import pytest
 
 from kahu_tuner.approval import (
     OperatorLevel,

@@ -7,14 +7,13 @@ from typing import Any
 
 from kahu_pono.components import ComponentResult
 from kahu_pono.components.detection import DetectionInput, score_detection
-from kahu_pono.components.tuning import TuningInput, score_tuning
-from kahu_pono.components.vulnerability import VulnerabilityInput, score_vulnerability
+from kahu_pono.components.human import HumanInput, score_human
 from kahu_pono.components.identity import IdentityInput, score_identity
 from kahu_pono.components.response import ResponseInput, score_response
-from kahu_pono.components.human import HumanInput, score_human
+from kahu_pono.components.tuning import TuningInput, score_tuning
+from kahu_pono.components.vulnerability import VulnerabilityInput, score_vulnerability
 from kahu_pono.config import WeightsSchema
 from kahu_pono.freshness import apply_freshness
-
 
 # Maps component config names to (scorer_func, input_class)
 COMPONENT_REGISTRY: dict[str, tuple] = {

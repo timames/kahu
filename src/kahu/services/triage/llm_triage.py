@@ -158,9 +158,7 @@ def _build_prompt_data(enriched: EnrichedAlert) -> str:
     # Agent info
     agent = alert.get("agent", {})
     if agent:
-        sections.append(
-            f"Agent: {agent.get('name', '?')} (IP: {agent.get('ip', '?')})"
-        )
+        sections.append(f"Agent: {agent.get('name', '?')} (IP: {agent.get('ip', '?')})")
 
     # Alert data payload (the interesting bits)
     alert_payload = alert.get("data", {})
@@ -181,8 +179,9 @@ def _build_prompt_data(enriched: EnrichedAlert) -> str:
             summary_lines.append(
                 f"  [{r.get('id', '?')}] L{r.get('level', '?')}: {r.get('description', '?')}"
             )
-        sections.append(f"Related events ({len(related)} total, showing first 10):\n" +
-                        "\n".join(summary_lines))
+        sections.append(
+            f"Related events ({len(related)} total, showing first 10):\n" + "\n".join(summary_lines)
+        )
 
     # Vulnerability state
     vuln = data.get("vuln_state", {})
@@ -231,7 +230,8 @@ def _build_prompt_data(enriched: EnrichedAlert) -> str:
             )
         elif tp_count > fp_count and total >= 5:
             hist_block += (
-                f"\n  >>> WARNING: This rule is more often true-positive ({tp_count} TP vs {fp_count} FP). "
+                f"\n  >>> WARNING: This rule is more often true-positive "
+                f"({tp_count} TP vs {fp_count} FP). "
                 f"Treat with elevated seriousness."
             )
 
@@ -255,7 +255,8 @@ def _build_prompt_data(enriched: EnrichedAlert) -> str:
 
         if agent_fp_rate >= 0.8:
             agent_block += (
-                f"\n  >>> NOISY HOST: {agent_fp_rate:.0%} of alerts from this host are false positives. "
+                f"\n  >>> NOISY HOST: {agent_fp_rate:.0%} of alerts from "
+                f"this host are false positives. "
                 f"Increase skepticism for alerts from this agent."
             )
 
@@ -272,7 +273,7 @@ def _parse_llm_response(raw: str) -> dict:
     if text.startswith("```"):
         lines = text.split("\n")
         # Remove first and last lines (``` markers)
-        lines = [l for l in lines if not l.strip().startswith("```")]
+        lines = [ln for ln in lines if not ln.strip().startswith("```")]
         text = "\n".join(lines)
 
     try:

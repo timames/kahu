@@ -136,7 +136,11 @@ class TestResponseParsing:
         assert "Brute force" in result["explanation"]
 
     def test_strips_markdown_fences(self):
-        response = '```json\n{"severity": "medium", "explanation": "test", "benign_explanations": [], "recommended_actions": [], "confidence": 0.5}\n```'
+        response = (
+            '```json\n{"severity": "medium", "explanation": "test",'
+            ' "benign_explanations": [], "recommended_actions": [],'
+            ' "confidence": 0.5}\n```'
+        )
         result = _parse_llm_response(response)
         assert result["severity"] == "medium"
 

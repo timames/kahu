@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from kahu_tuning import __version__
-from kahu_tuning.config import canonical_json, config_hash
+from kahu_tuning.config import config_hash
 from kahu_tuning.signing import sign_payload
 
 
@@ -56,7 +56,7 @@ def build_proposal(
     The proposal is constructed with all fields except signature.
     Call sign_proposal() to add the Ed25519 signature.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return {
         "proposal_id": str(uuid.uuid4()),
         "created": now.isoformat(),

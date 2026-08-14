@@ -38,7 +38,10 @@ def score_human(inp: HumanInput, subweights: dict[str, float]) -> tuple[float, d
     if inp.mean_training_age_days <= 0:
         scores["training_recency"] = 1.0
     else:
-        scores["training_recency"] = max(0.0, 1.0 - inp.mean_training_age_days / inp.training_max_age_days)
+        scores["training_recency"] = max(
+            0.0,
+            1.0 - inp.mean_training_age_days / inp.training_max_age_days,
+        )
 
     raw = sum(scores.get(k, 0.0) * w for k, w in subweights.items())
     return raw, scores

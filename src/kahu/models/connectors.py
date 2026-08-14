@@ -1,19 +1,17 @@
 """Connector instances — configured log sources."""
 
-import uuid
+import enum
 from datetime import datetime
-from typing import Optional
 
-from sqlalchemy import DateTime, Enum as SAEnum, String, func
 from sqlalchemy import JSON as JSONB  # JSON works on both Postgres and SQLite
+from sqlalchemy import DateTime, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
 from kahu.models.base import Base, TimestampMixin, UUIDPrimaryKey
 
-import enum
 
-
-class ConnectorStatus(str, enum.Enum):
+class ConnectorStatus(enum.StrEnum):
     PENDING = "pending"
     TESTING = "testing"
     ACTIVE = "active"
@@ -32,9 +30,7 @@ class ConnectorInstance(Base, UUIDPrimaryKey, TimestampMixin):
     )
     config: Mapped[dict] = mapped_column(JSONB, default=dict)
     credentials: Mapped[dict] = mapped_column(JSONB, default=dict)
-    last_event_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     events_today: Mapped[int] = mapped_column(default=0)
     events_total: Mapped[int] = mapped_column(default=0)
-    error_message: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(512), nullable=True)

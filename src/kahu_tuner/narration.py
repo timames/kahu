@@ -51,7 +51,7 @@ async def narrate_proposal(
 def _build_narration_prompt(evidence: dict) -> str:
     """Build a narration prompt from the evidence block only."""
     parts = [
-        f"Alert rate evidence summary:",
+        "Alert rate evidence summary:",
         f"- Events observed in 90 days: {evidence.get('n_90d', 0)}",
         f"- Effective exposure: {evidence.get('t_star_hours', 0):.1f} hours",
         f"- Posterior mean rate: {evidence.get('posterior_mean', 0):.4f} events/hour",

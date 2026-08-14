@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from kahu.services.compliance.controls import tags_for_alert
 
-
 # ---------------------------------------------------------------------------
 # Control-tag mapping
 # ---------------------------------------------------------------------------
@@ -73,13 +72,10 @@ def test_tags_for_alert_sorted():
 
 def test_engine_imports():
     from kahu.services.compliance.engine import (
-        ControlStatus,
-        CoverageReport,
-        FamilyStatus,
-        GapAnalysis,
-        GapItem,
         KAHU_CAPABILITIES,
         MANUAL_RECOMMENDATIONS,
+        ControlStatus,
+        CoverageReport,
     )
     assert len(KAHU_CAPABILITIES) > 0
     assert len(MANUAL_RECOMMENDATIONS) > 0

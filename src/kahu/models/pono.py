@@ -2,8 +2,8 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Integer, String, func
 from sqlalchemy import JSON as JSONB
+from sqlalchemy import DateTime, Float, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from kahu.models.base import Base, UUIDPrimaryKey

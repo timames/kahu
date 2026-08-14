@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass
@@ -29,13 +29,13 @@ class WindowState:
     def posterior_variance(self) -> float:
         if self.beta == 0:
             return 0.0
-        return self.alpha / (self.beta ** 2)
+        return self.alpha / (self.beta**2)
 
     @property
     def posterior_cv(self) -> float:
         if self.alpha <= 0:
             return float("inf")
-        return 1.0 / (self.alpha ** 0.5)
+        return 1.0 / (self.alpha**0.5)
 
 
 @dataclass

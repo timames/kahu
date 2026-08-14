@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.db import get_session
-from kahu.services.investigation.query import investigate, get_timeline
+from kahu.services.investigation.query import get_timeline, investigate
 
 router = APIRouter()
 
@@ -31,7 +31,7 @@ class ChatResponse(BaseModel):
 @router.post("/query", response_model=ChatResponse)
 async def investigation_query(
     body: ChatMessage,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> ChatResponse:
     """Ask a natural-language question about alerts, logs, and security posture.
 
@@ -45,9 +45,9 @@ async def investigation_query(
 
 @router.get("/timeline")
 async def investigation_timeline(
-    target: str = Query(..., description="Hostname or IP to investigate"),
-    hours: int = Query(24, ge=1, le=720, description="How many hours back to look"),
-    session: AsyncSession = Depends(get_session),
+    target: str = Query(..., description="Hostname or IP to investigate"),  # noqa: B008
+    hours: int = Query(24, ge=1, le=720, description="How many hours back to look"),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:
     """Build an event timeline for a specific host or IP.
 

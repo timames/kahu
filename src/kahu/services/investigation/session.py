@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 # In-memory session store. For v1 this is fine — sessions are ephemeral
 # and tied to a single analyst's browser tab. Persistence can move to
 # Redis later if needed.
-_sessions: dict[str, "InvestigationSession"] = {}
+_sessions: dict[str, InvestigationSession] = {}
 
 SESSION_TTL = 3600  # 1 hour
 MAX_HISTORY = 20  # max turns to keep
@@ -36,9 +36,7 @@ class InvestigationSession:
         self.last_active = time.time()
 
     def add_kahu_turn(self, response: str, context_count: int = 0) -> None:
-        self.history.append(
-            Turn(role="kahu", content=response, context_count=context_count)
-        )
+        self.history.append(Turn(role="kahu", content=response, context_count=context_count))
         self._trim()
         self.last_active = time.time()
 
@@ -74,8 +72,6 @@ def get_or_create_session(session_id: str | None) -> InvestigationSession:
 def _evict_stale() -> None:
     """Remove sessions older than TTL."""
     now = time.time()
-    stale = [
-        sid for sid, s in _sessions.items() if now - s.last_active > SESSION_TTL
-    ]
+    stale = [sid for sid, s in _sessions.items() if now - s.last_active > SESSION_TTL]
     for sid in stale:
         del _sessions[sid]

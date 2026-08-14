@@ -76,9 +76,8 @@ async def record_evidence(
 
 async def verify_chain(session: AsyncSession) -> tuple[bool, str | None]:
     """Walk the evidence chain and return ``(intact, broken_at_hash)``."""
-    stmt = (
-        select(EvidenceRecord.record_hash, EvidenceRecord.previous_hash)
-        .order_by(EvidenceRecord.timestamp)
+    stmt = select(EvidenceRecord.record_hash, EvidenceRecord.previous_hash).order_by(
+        EvidenceRecord.timestamp
     )
     result = await session.execute(stmt)
 
@@ -92,11 +91,7 @@ async def verify_chain(session: AsyncSession) -> tuple[bool, str | None]:
 
 
 async def _get_latest_hash(session: AsyncSession) -> str:
-    stmt = (
-        select(EvidenceRecord.record_hash)
-        .order_by(desc(EvidenceRecord.timestamp))
-        .limit(1)
-    )
+    stmt = select(EvidenceRecord.record_hash).order_by(desc(EvidenceRecord.timestamp)).limit(1)
     result = await session.execute(stmt)
     row = result.scalar_one_or_none()
     return row or GENESIS_HASH

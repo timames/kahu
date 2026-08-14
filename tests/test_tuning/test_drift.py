@@ -1,6 +1,5 @@
 """Tests for KL divergence drift detection."""
 
-import math
 
 import pytest
 

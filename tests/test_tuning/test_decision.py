@@ -116,7 +116,13 @@ class TestShouldSuppress:
     def test_threshold_scales_with_risk(self):
         """Threshold = theta_base * risk_multiplier."""
         config = TuningConfig(theta_base=20.0)
-        _, _, _, t1 = should_suppress(n=10, alpha0=1.0, beta0=1.0, t_star=24.0, risk_multiplier=1.0, config=config)
-        _, _, _, t2 = should_suppress(n=10, alpha0=1.0, beta0=1.0, t_star=24.0, risk_multiplier=5.0, config=config)
+        _, _, _, t1 = should_suppress(
+            n=10, alpha0=1.0, beta0=1.0, t_star=24.0,
+            risk_multiplier=1.0, config=config,
+        )
+        _, _, _, t2 = should_suppress(
+            n=10, alpha0=1.0, beta0=1.0, t_star=24.0,
+            risk_multiplier=5.0, config=config,
+        )
         assert t1 == pytest.approx(20.0)
         assert t2 == pytest.approx(100.0)

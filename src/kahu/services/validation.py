@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import random
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,11 +26,11 @@ log = logging.getLogger("kahu.validation")
 
 # Checks run against each sampled endpoint
 ENDPOINT_CHECKS = [
-    "agent_active",        # Is the Wazuh agent connected and reporting?
-    "syscheck_current",    # FIM database updated within threshold?
-    "rootcheck_current",   # Rootcheck scan run recently?
+    "agent_active",  # Is the Wazuh agent connected and reporting?
+    "syscheck_current",  # FIM database updated within threshold?
+    "rootcheck_current",  # Rootcheck scan run recently?
     "vulnerability_scan",  # Vulnerability detector data fresh?
-    "sca_pass_rate",       # Security Configuration Assessment pass %?
+    "sca_pass_rate",  # Security Configuration Assessment pass %?
 ]
 
 # Thresholds for pass/fail
@@ -69,7 +69,7 @@ async def check_agent(wazuh: WazuhAPIClient, agent_id: str) -> tuple[dict, list[
 
     # 1. Agent status
     try:
-        resp = await wazuh.api_get(f"/agents", params={"agents_list": agent_id})
+        resp = await wazuh.api_get("/agents", params={"agents_list": agent_id})
         items = resp.get("data", {}).get("affected_items", [])
         if items:
             agent_data = items[0]
@@ -91,7 +91,7 @@ async def check_agent(wazuh: WazuhAPIClient, agent_id: str) -> tuple[dict, list[
         end_str = scan_data.get("end", scan_data.get("start"))
         if end_str:
             end_time = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-            age_hours = (datetime.now(timezone.utc) - end_time).total_seconds() / 3600
+            age_hours = (datetime.now(UTC) - end_time).total_seconds() / 3600
             threshold = CHECK_THRESHOLDS["syscheck_current"]["max_age_hours"]
             results["syscheck_current"] = age_hours <= threshold
             if age_hours > threshold:
@@ -110,7 +110,7 @@ async def check_agent(wazuh: WazuhAPIClient, agent_id: str) -> tuple[dict, list[
         end_str = scan_data.get("end", scan_data.get("start"))
         if end_str:
             end_time = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-            age_hours = (datetime.now(timezone.utc) - end_time).total_seconds() / 3600
+            age_hours = (datetime.now(UTC) - end_time).total_seconds() / 3600
             threshold = CHECK_THRESHOLDS["rootcheck_current"]["max_age_hours"]
             results["rootcheck_current"] = age_hours <= threshold
             if age_hours > threshold:
@@ -146,8 +146,7 @@ async def check_agent(wazuh: WazuhAPIClient, agent_id: str) -> tuple[dict, list[
         if policies:
             total_pass = sum(p.get("pass", 0) for p in policies)
             total_checks = sum(
-                p.get("pass", 0) + p.get("fail", 0) + p.get("invalid", 0)
-                for p in policies
+                p.get("pass", 0) + p.get("fail", 0) + p.get("invalid", 0) for p in policies
             )
             if total_checks > 0:
                 pass_rate = total_pass / total_checks
@@ -195,14 +194,12 @@ async def run_validation_round(
     if wazuh is None:
         wazuh = WazuhAPIClient()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     round_id = str(uuid.uuid4())
 
     # Get current Pono Score
     latest_snapshot = await session.scalar(
-        select(PonoSnapshot.pono_score)
-        .order_by(desc(PonoSnapshot.timestamp))
-        .limit(1)
+        select(PonoSnapshot.pono_score).order_by(desc(PonoSnapshot.timestamp)).limit(1)
     )
     pono_score = latest_snapshot if latest_snapshot is not None else 0.0
 
@@ -255,7 +252,7 @@ async def run_validation_round(
             agent_id=agent_id,
             agent_name=agent_name,
             scheduled_at=now,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
             verdict=verdict,
             checks=checks,
             findings=findings if findings else None,
@@ -268,7 +265,7 @@ async def run_validation_round(
     validation_rate = passed / evaluable if evaluable > 0 else None
     drift_detected = validation_rate is not None and validation_rate < 0.80
 
-    completed_at = datetime.now(timezone.utc)
+    completed_at = datetime.now(UTC)
 
     vr = ValidationRound(
         id=uuid.UUID(round_id),
@@ -299,12 +296,18 @@ async def run_validation_round(
     if drift_detected:
         log.warning(
             "validation: DRIFT DETECTED — round %s pass rate %.1f%% (pono=%.1f)",
-            round_id[:8], (validation_rate or 0) * 100, pono_score,
+            round_id[:8],
+            (validation_rate or 0) * 100,
+            pono_score,
         )
     else:
         log.info(
             "validation: round %s complete — %d/%d passed (fleet=%d, pono=%.1f)",
-            round_id[:8], passed, actual_sample_size, fleet_size, pono_score,
+            round_id[:8],
+            passed,
+            actual_sample_size,
+            fleet_size,
+            pono_score,
         )
 
     return vr
@@ -313,16 +316,12 @@ async def run_validation_round(
 async def get_latest_round(session: AsyncSession) -> ValidationRound | None:
     """Get the most recent validation round."""
     result = await session.execute(
-        select(ValidationRound)
-        .order_by(desc(ValidationRound.started_at))
-        .limit(1)
+        select(ValidationRound).order_by(desc(ValidationRound.started_at)).limit(1)
     )
     return result.scalar_one_or_none()
 
 
-async def get_round_samples(
-    session: AsyncSession, round_id: str
-) -> list[ValidationSample]:
+async def get_round_samples(session: AsyncSession, round_id: str) -> list[ValidationSample]:
     """Get all samples for a given round."""
     result = await session.execute(
         select(ValidationSample)

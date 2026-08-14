@@ -1,6 +1,6 @@
 """Test 5: Decay preserves posterior mean and widens variance."""
 
-from datetime import date, datetime, timezone
+from datetime import date
 
 import pytest
 

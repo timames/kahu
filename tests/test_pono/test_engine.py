@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import pytest
 
+from kahu_pono.components.detection import DetectionInput
+from kahu_pono.components.human import HumanInput
+from kahu_pono.components.identity import IdentityInput
+from kahu_pono.components.response import ResponseInput
+from kahu_pono.components.tuning import TuningInput
+from kahu_pono.components.vulnerability import VulnerabilityInput
 from kahu_pono.config import WeightsSchema
 from kahu_pono.engine import (
     check_pono_drop,
     compute_pono_score,
-    find_biggest_gain,
-    score_component,
 )
-from kahu_pono.components.detection import DetectionInput
-from kahu_pono.components.tuning import TuningInput
-from kahu_pono.components.vulnerability import VulnerabilityInput
-from kahu_pono.components.identity import IdentityInput
-from kahu_pono.components.response import ResponseInput
-from kahu_pono.components.human import HumanInput
 from kahu_pono.freshness import freshness_factor
 
 

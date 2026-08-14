@@ -7,18 +7,15 @@ import pytest
 from kahu_tuning.canary import build_canary_event, filter_canary_tuples, is_canary
 from kahu_tuning.config import (
     CanaryConfig,
-    RiskConfig,
     TuningConfig,
     canonical_json,
     config_hash,
 )
-from kahu_tuning.conjugate import gamma_poisson_update, posterior_mean
 from kahu_tuning.decay import apply_decay
 from kahu_tuning.decision import should_suppress
 from kahu_tuning.drift import check_drift
 from kahu_tuning.models import FleetPrior, TupleState, WindowState
 from kahu_tuning.risk import compute_risk_multiplier
-from kahu_tuning.shrinkage import hierarchical_update
 
 
 class TestSlowPoisoning:
@@ -72,7 +69,11 @@ class TestSlowPoisoning:
         )
 
         # Drift MUST fire: rate has increased from 1.0 to ~3.0
-        assert drift is True, f"Drift should fire: KL={kl}, 90d mean={state.w_90d.posterior_mean}, golden mean={state.golden_alpha/state.golden_beta}"
+        assert drift is True, (
+            f"Drift should fire: KL={kl}, "
+            f"90d mean={state.w_90d.posterior_mean}, "
+            f"golden mean={state.golden_alpha / state.golden_beta}"
+        )
 
         # Suppression MUST NOT be emitted for drifting tuples
         # Per spec: "Drift flags are never auto-resolved and never produce suppression proposals"

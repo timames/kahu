@@ -21,7 +21,7 @@ Do NOT use bullet points or markdown. Speak naturally."""
 
 
 @router.get("/briefing")
-async def get_briefing(session: AsyncSession = Depends(get_session)) -> dict:
+async def get_briefing(session: AsyncSession = Depends(get_session)) -> dict:  # noqa: B008
     """Generate an AI security briefing based on current state."""
 
     # Gather context
@@ -33,7 +33,9 @@ async def get_briefing(session: AsyncSession = Depends(get_session)) -> dict:
         .group_by(Alert.severity)
     )
     result = await session.execute(stmt)
-    pending_by_sev = {row[0].value if isinstance(row[0], Severity) else row[0]: row[1] for row in result.all()}
+    pending_by_sev = {
+        row[0].value if isinstance(row[0], Severity) else row[0]: row[1] for row in result.all()
+    }
 
     # 2. Total dispositioned today-ish (recent)
     disp_count_result = await session.scalar(select(func.count()).select_from(AlertDisposition))
@@ -56,15 +58,28 @@ async def get_briefing(session: AsyncSession = Depends(get_session)) -> dict:
     critical_count = pending_by_sev.get("critical", 0)
     high_count = pending_by_sev.get("high", 0)
 
+    med = pending_by_sev.get("medium", 0)
+    low = pending_by_sev.get("low", 0)
+    info = pending_by_sev.get("info", 0)
+
     context_parts = [
         f"Current queue: {pending_total} undispositioned alerts.",
-        f"Breakdown: {critical_count} critical, {high_count} high, {pending_by_sev.get('medium', 0)} medium, {pending_by_sev.get('low', 0)} low, {pending_by_sev.get('info', 0)} info.",
-        f"Total alerts processed: {total_alerts}. Dispositioned so far: {disp_count}.",
+        (
+            f"Breakdown: {critical_count} critical,"
+            f" {high_count} high, {med} medium,"
+            f" {low} low, {info} info."
+        ),
+        (
+            f"Total alerts processed: {total_alerts}."
+            f" Dispositioned so far: {disp_count}."
+        ),
     ]
 
     if latest_critical:
+        host = latest_critical[1] or "unknown"
         context_parts.append(
-            f"Most recent critical alert: \"{latest_critical[0]}\" on host {latest_critical[1] or 'unknown'} at {latest_critical[2]}."
+            f'Most recent critical alert: "{latest_critical[0]}"'
+            f" on host {host} at {latest_critical[2]}."
         )
 
     context = " ".join(context_parts)
@@ -90,9 +105,23 @@ async def get_briefing(session: AsyncSession = Depends(get_session)) -> dict:
     except Exception:
         # Fallback — deterministic briefing
         if critical_count > 0:
-            fallback = f"Heads up — you have {critical_count} critical and {high_count} high-severity alerts pending review. The most recent is on {latest_critical[1] if latest_critical else 'an unknown host'}. I'd start there."
+            recent_host = (
+                latest_critical[1]
+                if latest_critical
+                else "an unknown host"
+            )
+            fallback = (
+                f"Heads up — you have {critical_count} critical"
+                f" and {high_count} high-severity alerts pending"
+                f" review. The most recent is on {recent_host}."
+                " I'd start there."
+            )
         elif pending_total > 0:
-            fallback = f"Things are mostly calm. You have {pending_total} alerts in the queue, nothing critical. Routine review recommended."
+            fallback = (
+                "Things are mostly calm. You have"
+                f" {pending_total} alerts in the queue,"
+                " nothing critical. Routine review recommended."
+            )
         else:
             fallback = "All quiet. No pending alerts in the queue. All systems operational."
 

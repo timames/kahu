@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import desc, func, select
@@ -16,15 +16,14 @@ from kahu.models.alerts import Alert, AlertDisposition, Severity
 from kahu.models.connectors import ConnectorInstance, ConnectorStatus
 from kahu.models.evidence import EvidenceRecord
 from kahu.models.pono import PonoSnapshot
-
-from kahu_pono.config import WeightsSchema
-from kahu_pono.engine import check_pono_drop, compute_pono_score
 from kahu_pono.components.detection import DetectionInput
-from kahu_pono.components.tuning import TuningInput
-from kahu_pono.components.vulnerability import VulnerabilityInput
+from kahu_pono.components.human import HumanInput
 from kahu_pono.components.identity import IdentityInput
 from kahu_pono.components.response import ResponseInput
-from kahu_pono.components.human import HumanInput
+from kahu_pono.components.tuning import TuningInput
+from kahu_pono.components.vulnerability import VulnerabilityInput
+from kahu_pono.config import WeightsSchema
+from kahu_pono.engine import check_pono_drop, compute_pono_score
 from kahu_pono.freshness import evidence_age_days
 
 log = logging.getLogger("kahu.pono")
@@ -63,32 +62,33 @@ async def _gather_detection(session: AsyncSession, now: datetime) -> tuple[Detec
     one_day_ago = now - timedelta(days=1)
 
     # Sensor health: count distinct agent_names seen in last 24h vs all time
-    recent_agents = await session.scalar(
-        select(func.count(func.distinct(Alert.agent_name)))
-        .where(Alert.created_at >= one_day_ago)
-    ) or 0
-    total_agents = await session.scalar(
-        select(func.count(func.distinct(Alert.agent_name)))
-    ) or 0
+    recent_agents = (
+        await session.scalar(
+            select(func.count(func.distinct(Alert.agent_name))).where(
+                Alert.created_at >= one_day_ago
+            )
+        )
+        or 0
+    )
+    total_agents = await session.scalar(select(func.count(func.distinct(Alert.agent_name)))) or 0
 
     # Log source coverage: active connectors vs total
-    active_connectors = await session.scalar(
-        select(func.count()).where(ConnectorInstance.status == ConnectorStatus.ACTIVE)
-    ) or 0
-    total_connectors = await session.scalar(
-        select(func.count()).select_from(ConnectorInstance)
-    ) or 0
+    active_connectors = (
+        await session.scalar(
+            select(func.count()).where(ConnectorInstance.status == ConnectorStatus.ACTIVE)
+        )
+        or 0
+    )
+    total_connectors = (
+        await session.scalar(select(func.count()).select_from(ConnectorInstance)) or 0
+    )
 
     # Latest alert timestamp for update freshness
-    latest_alert_ts = await session.scalar(
-        select(func.max(Alert.created_at))
-    )
+    latest_alert_ts = await session.scalar(select(func.max(Alert.created_at)))
     last_update_days = evidence_age_days(latest_alert_ts, now) if latest_alert_ts else 30.0
 
     # Latest evidence for this component
-    latest_evidence = await session.scalar(
-        select(func.max(EvidenceRecord.timestamp))
-    )
+    latest_evidence = await session.scalar(select(func.max(EvidenceRecord.timestamp)))
     age = evidence_age_days(latest_evidence, now) if latest_evidence else 0.0
 
     return DetectionInput(
@@ -102,8 +102,6 @@ async def _gather_detection(session: AsyncSession, now: datetime) -> tuple[Detec
 
 async def _gather_response(session: AsyncSession, now: datetime) -> tuple[ResponseInput, float]:
     """Gather response readiness inputs from disposition data."""
-    from datetime import timedelta
-    from sqlalchemy import extract
 
     ack_sla_minutes = 15.0
 
@@ -140,25 +138,25 @@ async def _gather_response(session: AsyncSession, now: datetime) -> tuple[Respon
         cases_in_sla = 0
 
     # Total cases needing response (critical + high alerts)
-    total_needing = await session.scalar(
-        select(func.count()).where(
-            Alert.severity.in_([Severity.CRITICAL, Severity.HIGH])
+    total_needing = (
+        await session.scalar(
+            select(func.count()).where(Alert.severity.in_([Severity.CRITICAL, Severity.HIGH]))
         )
-    ) or 0
+        or 0
+    )
 
     # Auto-disposition (playbook) stats from pipeline_provenance
-    auto_disposed = await session.scalar(
-        select(func.count()).where(
-            Alert.pipeline_provenance["auto_disposed"].as_string() == "true"
+    auto_disposed = (
+        await session.scalar(
+            select(func.count()).where(
+                Alert.pipeline_provenance["auto_disposed"].as_string() == "true"
+            )
         )
-    ) or 0
-    total_alerts = await session.scalar(
-        select(func.count()).select_from(Alert)
-    ) or 0
-
-    latest_disposition = await session.scalar(
-        select(func.max(AlertDisposition.created_at))
+        or 0
     )
+    total_alerts = await session.scalar(select(func.count()).select_from(Alert)) or 0
+
+    latest_disposition = await session.scalar(select(func.max(AlertDisposition.created_at)))
     age = evidence_age_days(latest_disposition, now) if latest_disposition else 0.0
 
     return ResponseInput(
@@ -174,9 +172,7 @@ async def _gather_response(session: AsyncSession, now: datetime) -> tuple[Respon
 async def _gather_evidence_ages(session: AsyncSession, now: datetime) -> dict[str, float]:
     """Get evidence age per component from the evidence store."""
     # Use latest evidence timestamp as a general freshness indicator
-    latest = await session.scalar(
-        select(func.max(EvidenceRecord.timestamp))
-    )
+    latest = await session.scalar(select(func.max(EvidenceRecord.timestamp)))
     default_age = evidence_age_days(latest, now) if latest else 0.0
     return {
         "detection_posture": default_age,
@@ -194,7 +190,7 @@ async def gather_inputs(session: AsyncSession) -> tuple[dict, dict[str, float]]:
     Returns (inputs dict, evidence_ages dict).
     Components without live data sources use data_available=False.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     detection_input, detection_age = await _gather_detection(session, now)
     response_input, response_age = await _gather_response(session, now)
@@ -229,9 +225,7 @@ async def compute_and_persist(
 
     # Check for drop vs previous snapshot
     prev = await session.scalar(
-        select(PonoSnapshot.pono_score)
-        .order_by(desc(PonoSnapshot.timestamp))
-        .limit(1)
+        select(PonoSnapshot.pono_score).order_by(desc(PonoSnapshot.timestamp)).limit(1)
     )
     drop = None
     if prev is not None:
@@ -264,7 +258,9 @@ async def compute_and_persist(
     if drop:
         log.warning(
             "pono: score dropped %.1f points (%.1f → %.1f)",
-            drop["drop"], drop["previous_score"], drop["current_score"],
+            drop["drop"],
+            drop["previous_score"],
+            drop["current_score"],
         )
 
     log.info("pono: snapshot persisted score=%.1f trigger=%s", snapshot.pono_score, trigger)

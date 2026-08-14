@@ -8,21 +8,21 @@ Never silently extend.
 from __future__ import annotations
 
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
 def is_expired(proposal: dict, now: datetime | None = None) -> bool:
     """Check if a proposal has passed its expiry date."""
     if now is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
     expiry_str = proposal.get("expiry", "")
     if not expiry_str:
         return True
     try:
         expiry = datetime.fromisoformat(expiry_str)
         if expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=timezone.utc)
+            expiry = expiry.replace(tzinfo=UTC)
         return now >= expiry
     except (ValueError, TypeError):
         return True
@@ -33,10 +33,7 @@ def find_expired_proposals(
     now: datetime | None = None,
 ) -> list[dict]:
     """Filter to only expired, applied proposals."""
-    return [
-        p for p in proposals
-        if p.get("status") == "applied" and is_expired(p, now)
-    ]
+    return [p for p in proposals if p.get("status") == "applied" and is_expired(p, now)]
 
 
 def revert_applied_tune(
@@ -51,9 +48,8 @@ def revert_applied_tune(
     Returns:
         (success, message)
     """
-    commit_sha = (
-        proposal.get("approval", {}).get("applied_artifact", "")
-        or proposal.get("applied_commit", "")
+    commit_sha = proposal.get("approval", {}).get("applied_artifact", "") or proposal.get(
+        "applied_commit", ""
     )
     if not commit_sha:
         return False, "No commit SHA recorded for this proposal"
@@ -63,8 +59,8 @@ def revert_applied_tune(
         return False, f"Detection content directory not found: {content_dir}"
 
     try:
-        result = subprocess.run(
-            ["git", "revert", "--no-edit", commit_sha],
+        result = subprocess.run(  # noqa: S603, S607
+            ["git", "revert", "--no-edit", commit_sha],  # noqa: S607
             cwd=str(content_dir),
             capture_output=True,
             text=True,

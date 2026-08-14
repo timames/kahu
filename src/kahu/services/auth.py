@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import jwt
@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.config import settings
 from kahu.models.users import User
-
 
 # ---------------------------------------------------------------------------
 # Password hashing (PBKDF2-SHA256 via hashlib — no extra dependency)
@@ -49,7 +48,7 @@ _REFRESH_EXPIRE = timedelta(days=7)
 
 
 def create_access_token(user_id: UUID, username: str, role: str) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
         "username": username,
@@ -62,7 +61,7 @@ def create_access_token(user_id: UUID, username: str, role: str) -> str:
 
 
 def create_refresh_token(user_id: UUID) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
         "exp": now + _REFRESH_EXPIRE,
@@ -113,4 +112,5 @@ async def create_user(
 
 async def user_count(session: AsyncSession) -> int:
     from sqlalchemy import func
+
     return await session.scalar(select(func.count(User.id))) or 0

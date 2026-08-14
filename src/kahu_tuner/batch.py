@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from kahu_tuner.narration import narrate_proposal
 from kahu_tuning.canary import is_canary
-from kahu_tuning.config import CanaryConfig, RiskConfig, TuningConfig, config_hash
-from kahu_tuning.conjugate import posterior_mean
+from kahu_tuning.config import CanaryConfig, RiskConfig, TuningConfig
 from kahu_tuning.decay import apply_decay
-from kahu_tuning.decision import log_bayes_factor_01, posterior_odds, should_suppress
+from kahu_tuning.decision import should_suppress
 from kahu_tuning.drift import check_drift
-from kahu_tuning.models import FleetPrior, TupleState, WindowState
+from kahu_tuning.models import FleetPrior, TupleState
 from kahu_tuning.proposal import (
     add_narration,
     build_evidence_block,
@@ -23,7 +23,6 @@ from kahu_tuning.proposal import (
 )
 from kahu_tuning.seasonality import build_profile, effective_exposure
 from kahu_tuning.shrinkage import hierarchical_update
-from kahu_tuner.narration import narrate_proposal
 
 log = logging.getLogger(__name__)
 
@@ -84,16 +83,23 @@ async def run_batch(
 
         # Skip canary rules
         if is_canary(rule_id, canary_config):
-            result.canary_results.append({
-                "rule_id": rule_id,
-                "status": "canary_excluded",
-            })
+            result.canary_results.append(
+                {
+                    "rule_id": rule_id,
+                    "status": "canary_excluded",
+                }
+            )
             continue
 
         try:
-            state = states.get(key, TupleState(
-                rule_id=rule_id, source_key=source_key, asset_id=asset_id,
-            ))
+            state = states.get(
+                key,
+                TupleState(
+                    rule_id=rule_id,
+                    source_key=source_key,
+                    asset_id=asset_id,
+                ),
+            )
 
             # Build seasonality profile from 90d hour-of-week data
             event_hours = obs.get("hour_of_week_indices", [])
@@ -122,26 +128,35 @@ async def run_batch(
             state = apply_decay(state, today=today, config=tuning_config)
 
             # Update stored state
-            state.last_update_ts = datetime.now(timezone.utc)
+            state.last_update_ts = datetime.now(UTC)
             states[key] = state
 
             # Drift check
             drift, kl = check_drift(
-                state.w_90d.alpha, state.w_90d.beta,
-                state.golden_alpha, state.golden_beta,
+                state.w_90d.alpha,
+                state.w_90d.beta,
+                state.golden_alpha,
+                state.golden_beta,
                 epsilon=tuning_config.kl_epsilon_default,
             )
 
             if drift:
-                result.drift_reviews.append({
-                    "tuple": {"rule_id": rule_id, "source_key": source_key, "asset_id": asset_id},
-                    "kl_divergence": round(kl, 6),
-                    "mean_90d": round(state.w_90d.posterior_mean, 6),
-                    "mean_golden": round(
-                        state.golden_alpha / state.golden_beta if state.golden_beta > 0 else 0, 6
-                    ),
-                    "detected_at": datetime.now(timezone.utc).isoformat(),
-                })
+                result.drift_reviews.append(
+                    {
+                        "tuple": {
+                            "rule_id": rule_id,
+                            "source_key": source_key,
+                            "asset_id": asset_id,
+                        },
+                        "kl_divergence": round(kl, 6),
+                        "mean_90d": round(state.w_90d.posterior_mean, 6),
+                        "mean_golden": round(
+                            state.golden_alpha / state.golden_beta if state.golden_beta > 0 else 0,
+                            6,
+                        ),
+                        "detected_at": datetime.now(UTC).isoformat(),
+                    }
+                )
                 # Drift tuples NEVER get suppression proposals
                 result.tuples_processed += 1
                 continue
@@ -202,12 +217,14 @@ async def run_batch(
                 # Mind narration (strictly out of decision path)
                 try:
                     narration = await narrate_proposal(
-                        evidence, ollama_url=ollama_url, model=ollama_model,
+                        evidence,
+                        ollama_url=ollama_url,
+                        model=ollama_model,
                     )
                     if narration:
                         proposal = add_narration(proposal, narration)
-                except Exception:
-                    pass  # Proposals proceed without narration
+                except Exception:  # noqa: S110
+                    pass  # noqa: S110
 
                 result.proposals.append(proposal)
 

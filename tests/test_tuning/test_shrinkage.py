@@ -3,7 +3,7 @@
 import pytest
 
 from kahu_tuning.config import TuningConfig
-from kahu_tuning.models import FleetPrior, TupleState, WindowState
+from kahu_tuning.models import TupleState, WindowState
 from kahu_tuning.shrinkage import hierarchical_update, shrinkage_prior, shrunk_posterior_mean
 
 
@@ -37,7 +37,10 @@ class TestShrunkPosteriorMean:
         n = int(2.0 * 72)  # events at true rate matching parent
         t = 72.0
 
-        mean = shrunk_posterior_mean("7d", n_events=n, t_hours=t, parent_mean=parent_mean, config=config)
+        mean = shrunk_posterior_mean(
+            "7d", n_events=n, t_hours=t,
+            parent_mean=parent_mean, config=config,
+        )
         assert abs(mean - parent_mean) / parent_mean < 0.10
 
     def test_dense_data_converges_to_empirical(self):
@@ -55,7 +58,10 @@ class TestShrunkPosteriorMean:
         n = int(true_rate * t)
 
         # Parent mean matches the true rate (as it would after golden update)
-        mean = shrunk_posterior_mean("90d", n_events=n, t_hours=t, parent_mean=true_rate, config=config)
+        mean = shrunk_posterior_mean(
+            "90d", n_events=n, t_hours=t,
+            parent_mean=true_rate, config=config,
+        )
         assert abs(mean - true_rate) / true_rate < 0.05
 
 

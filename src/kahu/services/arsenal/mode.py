@@ -9,7 +9,7 @@ Toggle requires explicit analyst confirmation. All mode changes are logged.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ def unlock(analyst: str) -> dict:
     global _unlocked, _unlocked_by, _unlocked_at
     _unlocked = True
     _unlocked_by = analyst
-    _unlocked_at = datetime.now(timezone.utc)
+    _unlocked_at = datetime.now(UTC)
     log.warning("Arsenal UNLOCKED by %s at %s", analyst, _unlocked_at.isoformat())
     return status()
 

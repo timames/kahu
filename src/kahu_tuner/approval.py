@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import IntEnum
 
 
@@ -76,6 +76,6 @@ def build_approval_record(
         "approver": approver_identity,
         "level": f"L{level.value}",
         "auto_applied": auto_applied,
-        "approved_at": datetime.now(timezone.utc).isoformat(),
+        "approved_at": datetime.now(UTC).isoformat(),
         "applied_artifact": applied_artifact,
     }

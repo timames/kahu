@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 
 from kahu_pono.config import WeightsSchema
 from kahu_pono.engine import (
     COMPONENT_REGISTRY,
-    PonoResult,
     check_pono_drop,
     compute_pono_score,
 )

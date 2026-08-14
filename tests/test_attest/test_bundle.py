@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from kahu_attest.bundle import (
     build_attestation,
@@ -19,11 +17,13 @@ from kahu_attest.bundle import (
 )
 from kahu_tuning.signing import generate_keypair
 
-
 # --- Helpers ---
 
 class _FakeComponent:
-    def __init__(self, name, raw_score, weighted_score, max_points, assessed, label, evidence_age_days):
+    def __init__(
+        self, name, raw_score, weighted_score, max_points,
+        assessed, label, evidence_age_days,
+    ):
         self.name = name
         self.raw_score = raw_score
         self.weighted_score = weighted_score
@@ -165,13 +165,13 @@ class TestExpiry:
 
     def test_expired(self):
         att = _make_attestation(validity_days=30)
-        future = datetime.now(timezone.utc) + timedelta(days=31)
+        future = datetime.now(UTC) + timedelta(days=31)
         assert is_attestation_expired(att, now=future)
 
     def test_exact_expiry(self):
         att = _make_attestation(validity_days=0)
         # expires ≈ now, so checking even 1 second later should be expired
-        future = datetime.now(timezone.utc) + timedelta(seconds=1)
+        future = datetime.now(UTC) + timedelta(seconds=1)
         assert is_attestation_expired(att, now=future)
 
 

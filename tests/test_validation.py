@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -43,8 +42,8 @@ def _fake_agents(n: int) -> list[dict]:
 def _mock_wazuh(agents: list[dict] | None = None) -> AsyncMock:
     """Build a mock WazuhAPIClient that returns plausible data."""
     wazuh = AsyncMock()
-    now_iso = datetime.now(timezone.utc).isoformat()
-    old_iso = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
+    (datetime.now(UTC) - timedelta(days=10)).isoformat()
 
     if agents is None:
         agents = _fake_agents(5)

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -72,7 +72,7 @@ def build_attestation(
     metadata: dict | None = None,
 ) -> dict:
     """Build an unsigned attestation v2 document."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     evidence_chain = build_evidence_chain(evidence_ids or [])
 
     return {
@@ -145,12 +145,12 @@ def is_attestation_expired(
 ) -> bool:
     """Check if an attestation has expired."""
     if now is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
     expires = datetime.fromisoformat(attestation["expires"])
     if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
+        expires = expires.replace(tzinfo=UTC)
     if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
+        now = now.replace(tzinfo=UTC)
     return now >= expires
 
 

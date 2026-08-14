@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from kahu_tuning.config import CanaryConfig
 
@@ -30,7 +30,7 @@ def build_canary_event(
     and excluded from real alert processing.
     """
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "rule": {
             "id": rule_id,
             "description": f"Canary test for rule {rule_id}",

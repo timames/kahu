@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kahu.db import get_session
 from kahu.api.deps import get_current_user, require_role
+from kahu.db import get_session
 from kahu.models.users import User
 from kahu.services.auth import (
     create_access_token,
@@ -37,7 +37,7 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105
     username: str
     role: str
 
@@ -71,14 +71,14 @@ class UserResponse(BaseModel):
 
 
 @router.get("/setup-required")
-async def setup_required(session: AsyncSession = Depends(get_session)) -> dict:
+async def setup_required(session: AsyncSession = Depends(get_session)) -> dict:  # noqa: B008
     """Check whether the appliance needs initial setup (no users exist yet)."""
     count = await user_count(session)
     return {"setup_required": count == 0}
 
 
 @router.post("/setup", response_model=TokenResponse)
-async def setup(body: SetupRequest, session: AsyncSession = Depends(get_session)):
+async def setup(body: SetupRequest, session: AsyncSession = Depends(get_session)):  # noqa: B008
     """Create the first admin user. Only works when no users exist."""
     count = await user_count(session)
     if count > 0:
@@ -94,7 +94,7 @@ async def setup(body: SetupRequest, session: AsyncSession = Depends(get_session)
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)):
+async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)):  # noqa: B008
     user = await get_user_by_username(session, body.username)
     if user is None or not verify_password(body.password, user.hashed_password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
@@ -110,11 +110,11 @@ async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(body: RefreshRequest, session: AsyncSession = Depends(get_session)):
+async def refresh(body: RefreshRequest, session: AsyncSession = Depends(get_session)):  # noqa: B008
     try:
         payload = decode_token(body.refresh_token)
-    except jwt.PyJWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid refresh token")
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid refresh token") from exc
 
     if payload.get("type") != "refresh":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not a refresh token")
@@ -132,7 +132,7 @@ async def refresh(body: RefreshRequest, session: AsyncSession = Depends(get_sess
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(user: User = Depends(get_current_user)):
+async def me(user: User = Depends(get_current_user)):  # noqa: B008
     return UserResponse(
         id=str(user.id),
         username=user.username,
@@ -145,8 +145,8 @@ async def me(user: User = Depends(get_current_user)):
 @router.post("/users", response_model=UserResponse)
 async def create_new_user(
     body: CreateUserRequest,
-    session: AsyncSession = Depends(get_session),
-    _admin: User = Depends(require_role("admin")),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+    _admin: User = Depends(require_role("admin")),  # noqa: B008
 ):
     """Create a new user (admin only)."""
     existing = await get_user_by_username(session, body.username)

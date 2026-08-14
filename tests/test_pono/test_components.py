@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
-
 from kahu_pono.components.detection import DetectionInput, score_detection
-from kahu_pono.components.tuning import TuningInput, score_tuning
-from kahu_pono.components.vulnerability import VulnerabilityInput, score_vulnerability
+from kahu_pono.components.human import HumanInput, score_human
 from kahu_pono.components.identity import IdentityInput, score_identity
 from kahu_pono.components.response import ResponseInput, score_response
-from kahu_pono.components.human import HumanInput, score_human
-
+from kahu_pono.components.tuning import TuningInput, score_tuning
+from kahu_pono.components.vulnerability import VulnerabilityInput, score_vulnerability
 
 # --- Detection ---
 
@@ -112,7 +109,10 @@ class TestVulnerability:
 # --- Identity ---
 
 class TestIdentity:
-    WEIGHTS = {"mfa_coverage": 0.30, "stale_accounts": 0.25, "admin_count": 0.25, "secret_age": 0.20}
+    WEIGHTS = {
+        "mfa_coverage": 0.30, "stale_accounts": 0.25,
+        "admin_count": 0.25, "secret_age": 0.20,
+    }
 
     def test_full_mfa(self):
         inp = IdentityInput(

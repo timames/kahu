@@ -27,7 +27,10 @@ def update_window(
 ) -> WindowState:
     """Apply conjugate update to a window and return updated copy."""
     new_alpha, new_beta = gamma_poisson_update(
-        window.alpha, window.beta, n_events, t_star_hours,
+        window.alpha,
+        window.beta,
+        n_events,
+        t_star_hours,
     )
     return WindowState(
         alpha=new_alpha,
@@ -46,4 +49,4 @@ def posterior_mean(alpha: float, beta: float) -> float:
 def posterior_variance(alpha: float, beta: float) -> float:
     if beta == 0:
         return 0.0
-    return alpha / (beta ** 2)
+    return alpha / (beta**2)

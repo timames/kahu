@@ -11,6 +11,7 @@ from pathlib import Path
 
 try:
     from fpdf import FPDF
+
     HAS_FPDF = True
 except ImportError:
     HAS_FPDF = False
@@ -42,10 +43,13 @@ class AttestationPDF:
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(100, 100, 100)
         pdf.cell(
-            0, 6,
+            0,
+            6,
             f"Attestation v{self.att.get('version', '2.0')} | "
             f"Engine {self.att.get('engine_version', 'unknown')}",
-            new_x="LMARGIN", new_y="NEXT", align="C",
+            new_x="LMARGIN",
+            new_y="NEXT",
+            align="C",
         )
         pdf.set_text_color(0, 0, 0)
         pdf.ln(8)
@@ -83,7 +87,7 @@ class AttestationPDF:
             pdf.set_fill_color(240, 240, 240)
             col_widths = [55, 25, 25, 25, 20, 40]
             headers = ["Component", "Score", "Max", "Raw", "Status", "Evidence Age"]
-            for w, h in zip(col_widths, headers):
+            for w, h in zip(col_widths, headers, strict=False):
                 pdf.cell(w, 7, h, border=1, fill=True)
             pdf.ln()
 
@@ -105,7 +109,8 @@ class AttestationPDF:
             self._section_header(pdf, "Recommendation")
             pdf.set_font("Helvetica", "", 10)
             pdf.multi_cell(
-                0, 6,
+                0,
+                6,
                 f"Biggest available gain: {gain['component']} "
                 f"(+{gain['available_gain']:.1f} points possible, "
                 f"currently {gain['current_score']:.1f}/{gain['max_points']})",
@@ -129,14 +134,17 @@ class AttestationPDF:
         pdf.set_font("Courier", "", 7)
         # Wrap long signature
         for i in range(0, len(sig), 80):
-            pdf.cell(0, 4, sig[i:i+80], new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 4, sig[i : i + 80], new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
         pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(100, 100, 100)
         pdf.cell(
-            0, 5,
-            "Ed25519 signature over canonical JSON. Verify with: kahu-verify <bundle.json> <pubkey.pem>",
-            new_x="LMARGIN", new_y="NEXT",
+            0,
+            5,
+            "Ed25519 signature over canonical JSON."
+            " Verify with: kahu-verify <bundle.json> <pubkey.pem>",
+            new_x="LMARGIN",
+            new_y="NEXT",
         )
         pdf.set_text_color(0, 0, 0)
 

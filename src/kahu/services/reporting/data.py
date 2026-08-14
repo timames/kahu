@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import String, cast, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
@@ -17,7 +17,7 @@ async def get_alert_summary(
     until: datetime | None = None,
 ) -> dict:
     """Aggregate alert stats for a time window."""
-    until = until or datetime.now(timezone.utc)
+    until = until or datetime.now(UTC)
 
     base = select(Alert).where(
         Alert.created_at >= since,
@@ -25,9 +25,7 @@ async def get_alert_summary(
     )
 
     # Total count
-    total = await session.scalar(
-        select(func.count()).select_from(base.subquery())
-    ) or 0
+    total = await session.scalar(select(func.count()).select_from(base.subquery())) or 0
 
     # By severity
     sev_stmt = (
@@ -66,10 +64,7 @@ async def get_alert_summary(
         .limit(10)
     )
     rule_result = await session.execute(rule_stmt)
-    top_rules = [
-        {"rule_id": r[0], "description": r[1], "count": r[2]}
-        for r in rule_result.all()
-    ]
+    top_rules = [{"rule_id": r[0], "description": r[1], "count": r[2]} for r in rule_result.all()]
 
     # Top source IPs (from raw_event JSON)
     # This uses a postgres JSON extraction
@@ -90,9 +85,7 @@ async def get_alert_summary(
     )
     try:
         ip_result = await session.execute(ip_stmt)
-        top_source_ips = [
-            {"ip": r[0], "count": r[1]} for r in ip_result.all()
-        ]
+        top_source_ips = [{"ip": r[0], "count": r[1]} for r in ip_result.all()]
     except Exception:
         top_source_ips = []
 
@@ -109,9 +102,7 @@ async def get_alert_summary(
         .limit(10)
     )
     host_result = await session.execute(host_stmt)
-    top_hosts = [
-        {"host": r[0], "count": r[1]} for r in host_result.all()
-    ]
+    top_hosts = [{"host": r[0], "count": r[1]} for r in host_result.all()]
 
     return {
         "period": {"since": since.isoformat(), "until": until.isoformat()},
@@ -217,15 +208,20 @@ async def get_evidence_summary(
     until: datetime | None = None,
 ) -> dict:
     """Aggregate evidence records for a compliance evidence package."""
-    until = until or datetime.now(timezone.utc)
+    until = until or datetime.now(UTC)
 
     # Total records
-    total = await session.scalar(
-        select(func.count()).select_from(EvidenceRecord).where(
-            EvidenceRecord.timestamp >= since,
-            EvidenceRecord.timestamp < until,
+    total = (
+        await session.scalar(
+            select(func.count())
+            .select_from(EvidenceRecord)
+            .where(
+                EvidenceRecord.timestamp >= since,
+                EvidenceRecord.timestamp < until,
+            )
         )
-    ) or 0
+        or 0
+    )
 
     # By event type
     type_stmt = (
