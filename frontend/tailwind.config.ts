@@ -6,11 +6,11 @@ export default {
     extend: {
       colors: {
         kahu: {
-          bg: "#0a0e17",
-          card: "#141b2d",
-          elevated: "#1a2340",
-          border: "#1e2a45",
-          accent: "#3b82f6",
+          bg: "var(--kahu-bg)",
+          card: "var(--kahu-card)",
+          elevated: "var(--kahu-elevated)",
+          border: "var(--kahu-border)",
+          accent: "var(--kahu-accent)",
         },
         sev: {
           critical: "#ef4444",

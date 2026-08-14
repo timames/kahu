@@ -7,7 +7,39 @@
     height: 100%;
   }
 
-  /* Scrollbar styling for dark theme */
+  /* Theme variables */
+  :root {
+    --kahu-bg: #0a0e17;
+    --kahu-card: #141b2d;
+    --kahu-elevated: #1a2340;
+    --kahu-border: #1e2a45;
+    --kahu-accent: #3b82f6;
+    --kahu-text: #e2e8f0;
+    --kahu-text-muted: #94a3b8;
+    --kahu-text-dim: #64748b;
+    --kahu-scrollbar: #1e2a45;
+    --kahu-scrollbar-hover: #2d3f66;
+  }
+
+  :root.light {
+    --kahu-bg: #f1f5f9;
+    --kahu-card: #ffffff;
+    --kahu-elevated: #f8fafc;
+    --kahu-border: #e2e8f0;
+    --kahu-accent: #2563eb;
+    --kahu-text: #1e293b;
+    --kahu-text-muted: #475569;
+    --kahu-text-dim: #94a3b8;
+    --kahu-scrollbar: #cbd5e1;
+    --kahu-scrollbar-hover: #94a3b8;
+  }
+
+  body {
+    background-color: var(--kahu-bg);
+    color: var(--kahu-text);
+  }
+
+  /* Scrollbar styling */
   ::-webkit-scrollbar {
     width: 6px;
   }
@@ -15,12 +47,20 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #1e2a45;
+    background: var(--kahu-scrollbar);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #2d3f66;
+    background: var(--kahu-scrollbar-hover);
   }
+
+  /* Light mode overrides for text colors used via Tailwind */
+  .light .text-white { color: var(--kahu-text) !important; }
+  .light .text-slate-200 { color: #334155 !important; }
+  .light .text-slate-300 { color: #475569 !important; }
+  .light .text-slate-400 { color: #64748b !important; }
+  .light .text-slate-500 { color: #94a3b8 !important; }
+  .light .text-slate-600 { color: #cbd5e1 !important; }
 }
 
 @layer components {

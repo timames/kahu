@@ -15,8 +15,37 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
+# Postgres enum types matching the Python StrEnum definitions in models/.
+severity_enum = postgresql.ENUM(
+    "critical", "high", "medium", "low", "info",
+    name="severity", create_type=False,
+)
+verdict_enum = postgresql.ENUM(
+    "true_positive", "acknowledged", "false_positive", "benign_true_positive", "undetermined",
+    name="dispositionverdict", create_type=False,
+)
+connector_status_enum = postgresql.ENUM(
+    "pending", "testing", "active", "error", "disabled",
+    name="connector_status", create_type=False,
+)
+ticket_status_enum = postgresql.ENUM(
+    "open", "in_progress", "closed",
+    name="ticket_status", create_type=False,
+)
+validation_verdict_enum = postgresql.ENUM(
+    "pass", "fail", "unreachable", "pending",
+    name="validation_verdict", create_type=False,
+)
+
 
 def upgrade() -> None:
+    # Create Postgres enum types first
+    severity_enum.create(op.get_bind(), checkfirst=True)
+    verdict_enum.create(op.get_bind(), checkfirst=True)
+    connector_status_enum.create(op.get_bind(), checkfirst=True)
+    ticket_status_enum.create(op.get_bind(), checkfirst=True)
+    validation_verdict_enum.create(op.get_bind(), checkfirst=True)
+
     # Users
     op.create_table(
         "users",
@@ -34,10 +63,10 @@ def upgrade() -> None:
     op.create_table(
         "alerts",
         sa.Column("id", sa.Uuid(), primary_key=True),
-        sa.Column("wazuh_alert_id", sa.String(100), nullable=False, index=True),
+        sa.Column("wazuh_alert_id", sa.String(255), nullable=False, index=True),
         sa.Column("rule_id", sa.String(50), nullable=False),
         sa.Column("rule_description", sa.Text(), nullable=False),
-        sa.Column("severity", sa.String(20), nullable=False),
+        sa.Column("severity", severity_enum, nullable=False),
         sa.Column("agent_name", sa.String(255), nullable=True),
         sa.Column("raw_event", postgresql.JSONB(), nullable=False),
         sa.Column("enrichment", postgresql.JSONB(), nullable=True),
@@ -53,7 +82,7 @@ def upgrade() -> None:
         "alert_dispositions",
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("alert_id", sa.Uuid(), sa.ForeignKey("alerts.id"), nullable=False, unique=True),
-        sa.Column("verdict", sa.String(30), nullable=False),
+        sa.Column("verdict", verdict_enum, nullable=False),
         sa.Column("analyst", sa.String(255), nullable=False),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
@@ -91,9 +120,9 @@ def upgrade() -> None:
     op.create_table(
         "connector_instances",
         sa.Column("id", sa.Uuid(), primary_key=True),
-        sa.Column("connector_type", sa.String(50), nullable=False, index=True),
-        sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("status", sa.String(20), nullable=False, server_default="pending"),
+        sa.Column("connector_type", sa.String(64), nullable=False, index=True),
+        sa.Column("name", sa.String(128), nullable=False),
+        sa.Column("status", connector_status_enum, nullable=False, server_default="pending"),
         sa.Column("config", postgresql.JSONB(), nullable=False),
         sa.Column("credentials", postgresql.JSONB(), nullable=False),
         sa.Column("last_event_at", sa.DateTime(timezone=True), nullable=True),
@@ -109,10 +138,10 @@ def upgrade() -> None:
         "tickets",
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("alert_id", sa.Uuid(), sa.ForeignKey("alerts.id"), nullable=False, unique=True),
-        sa.Column("title", sa.String(500), nullable=False),
+        sa.Column("title", sa.String(512), nullable=False),
         sa.Column("severity", sa.String(20), nullable=False),
-        sa.Column("ticket_type", sa.String(20), nullable=True, server_default="INCIDENT"),
-        sa.Column("status", sa.String(20), nullable=False, server_default="OPEN"),
+        sa.Column("ticket_type", sa.String(20), nullable=True, server_default="incident"),
+        sa.Column("status", ticket_status_enum, nullable=False, server_default="open"),
         sa.Column("assigned_to", sa.String(255), nullable=False),
         sa.Column("closed_by", sa.String(255), nullable=True),
         sa.Column("resolution_notes", sa.Text(), nullable=True),
@@ -132,8 +161,57 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
 
+    # Pono Score snapshots
+    op.create_table(
+        "pono_snapshots",
+        sa.Column("id", sa.Uuid(), primary_key=True),
+        sa.Column("timestamp", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False, index=True),
+        sa.Column("pono_score", sa.Float(), nullable=False, index=True),
+        sa.Column("schema_version", sa.String(20), nullable=False),
+        sa.Column("components", postgresql.JSONB(), nullable=False),
+        sa.Column("biggest_gain", postgresql.JSONB(), nullable=True),
+        sa.Column("pono_drop", postgresql.JSONB(), nullable=True),
+        sa.Column("trigger", sa.String(50), nullable=False),
+    )
+
+    # Validation samples
+    op.create_table(
+        "validation_samples",
+        sa.Column("id", sa.Uuid(), primary_key=True),
+        sa.Column("round_id", sa.String(36), nullable=False, index=True),
+        sa.Column("agent_id", sa.String(255), nullable=False, index=True),
+        sa.Column("agent_name", sa.String(255), nullable=False),
+        sa.Column("scheduled_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("verdict", validation_verdict_enum, nullable=False, server_default="pending"),
+        sa.Column("checks", postgresql.JSONB(), nullable=True),
+        sa.Column("findings", postgresql.JSONB(), nullable=True),
+        sa.Column("score_at_sample", sa.Float(), nullable=True),
+    )
+
+    # Validation rounds
+    op.create_table(
+        "validation_rounds",
+        sa.Column("id", sa.Uuid(), primary_key=True),
+        sa.Column("started_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False, index=True),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("sample_size", sa.Integer(), nullable=False),
+        sa.Column("fleet_size", sa.Integer(), nullable=False),
+        sa.Column("samples_completed", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("samples_passed", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("samples_failed", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("samples_unreachable", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("pono_score_at_start", sa.Float(), nullable=False),
+        sa.Column("validation_rate", sa.Float(), nullable=True),
+        sa.Column("drift_detected", sa.Boolean(), nullable=True),
+        sa.Column("summary", postgresql.JSONB(), nullable=True),
+    )
+
 
 def downgrade() -> None:
+    op.drop_table("validation_rounds")
+    op.drop_table("validation_samples")
+    op.drop_table("pono_snapshots")
     op.drop_table("xp_events")
     op.drop_table("tickets")
     op.drop_table("connector_instances")
@@ -142,3 +220,10 @@ def downgrade() -> None:
     op.drop_table("alert_dispositions")
     op.drop_table("alerts")
     op.drop_table("users")
+
+    # Drop enum types
+    validation_verdict_enum.drop(op.get_bind(), checkfirst=True)
+    ticket_status_enum.drop(op.get_bind(), checkfirst=True)
+    connector_status_enum.drop(op.get_bind(), checkfirst=True)
+    verdict_enum.drop(op.get_bind(), checkfirst=True)
+    severity_enum.drop(op.get_bind(), checkfirst=True)

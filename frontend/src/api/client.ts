@@ -65,12 +65,21 @@ export const getHistory = (limit = 50) =>
   request<{ alerts: Alert[]; total: number }>(`/triage/history?limit=${limit}`);
 
 export const disposeAlert = (alertId: string, verdict: string, notes = "") =>
-  request("/triage/disposition", {
+  request(`/triage/alerts/${alertId}/disposition`, {
     method: "POST",
-    body: JSON.stringify({ alert_id: alertId, verdict, notes, analyst: "analyst" }),
+    body: JSON.stringify({ verdict, analyst: "analyst", notes: notes || null }),
   });
 
 export const getTriageStatus = () => request<TriageStatus>("/triage/status");
+
+// ── Swipe Feed ──
+export const getSwipeFeed = (limit = 10) =>
+  request<SwipeFeedResponse>(`/m/feed?limit=${limit}`);
+export const swipeAlert = (alertId: string, direction: string, analyst = "analyst") =>
+  request<SwipeResult>(`/m/feed/${alertId}/swipe`, {
+    method: "POST",
+    body: JSON.stringify({ direction, analyst }),
+  });
 
 // ── Investigation ──
 export const investigate = (message: string, sessionId?: string) =>
@@ -96,14 +105,30 @@ export const getEvidencePackage = (days = 30) =>
   request<Report>(`/reports/evidence?days=${days}`);
 
 // ── Compliance ──
-export const getFrameworks = () => request<Framework[]>("/compliance/frameworks");
-export const getProfiles = () => request<Profile[]>("/compliance/profiles");
+export const getFrameworks = () =>
+  request<{ frameworks: Framework[] }>("/compliance/frameworks").then((r) => r.frameworks);
+export const getProfiles = () =>
+  request<{ profiles: Profile[] }>("/compliance/profiles").then((r) => r.profiles);
 export const getCoverage = (frameworkId: string) =>
   request<CoverageData>(`/compliance/frameworks/${frameworkId}/coverage`);
 
 // ── Connectors ──
-export const getConnectorCatalog = () => request<ConnectorType[]>("/connectors/catalog");
+export const getConnectorCatalog = () =>
+  request<ConnectorCatalogResponse>("/connectors/catalog");
 export const getConnectorSources = () => request<ConnectorSource[]>("/connectors/sources");
+export const getConnectorOverview = () => request<ConnectorOverview>("/connectors/overview");
+export const addConnectorSource = (body: {
+  connector_type: string;
+  name: string;
+  config: Record<string, string>;
+  credentials: Record<string, string>;
+}) => request<ConnectorSource>("/connectors/sources", { method: "POST", body: JSON.stringify(body) });
+export const testConnectorSource = (sourceId: string) =>
+  request<ConnectorTestResult>(`/connectors/sources/${sourceId}/test`, { method: "POST" });
+export const deleteConnectorSource = (sourceId: string) =>
+  request(`/connectors/sources/${sourceId}`, { method: "DELETE" });
+export const toggleConnectorSource = (sourceId: string) =>
+  request<ConnectorSource>(`/connectors/sources/${sourceId}/toggle`, { method: "PATCH" });
 
 // ── Recon ──
 export const dnsLookup = (target: string) =>
@@ -158,23 +183,15 @@ export interface UserInfo {
 
 export interface Alert {
   id: string;
+  wazuh_alert_id: string;
   severity: string;
   rule_id: string;
   rule_description: string;
   agent_name: string | null;
   created_at: string;
-  llm_triage: {
-    severity?: string;
-    explanation?: string;
-    recommended_actions?: string[];
-    confidence?: number;
-  } | null;
-  raw_event: Record<string, unknown>;
-  disposition?: {
-    verdict: string;
-    analyst: string;
-    notes: string | null;
-  } | null;
+  has_disposition: boolean;
+  llm_explanation: string | null;
+  degraded: boolean;
 }
 
 export interface TriageStatus {
@@ -183,6 +200,34 @@ export interface TriageStatus {
   total_processed: number;
   queue_depth: number;
   degraded: boolean;
+}
+
+export interface SwipeCard {
+  id: string;
+  severity: string;
+  title: string;
+  explanation: string;
+  ai_verdict: string | null;
+  ai_confidence: number;
+  agent: string | null;
+  source_ip: string | null;
+  timestamp: string;
+  recommended_actions: string[];
+  controls: string[];
+}
+
+export interface SwipeFeedResponse {
+  cards: SwipeCard[];
+  remaining: number;
+}
+
+export interface SwipeResult {
+  id: string;
+  verdict: string;
+  message: string;
+  xp_earned: number;
+  ticket_id: string | null;
+  ticket_type: string | null;
 }
 
 export interface InvestigationResponse {
@@ -242,21 +287,65 @@ export interface CoverageData {
   coverage: Record<string, unknown>;
 }
 
+export interface ConnectorField {
+  name: string;
+  label: string;
+  type: string;
+  required: boolean;
+  placeholder: string;
+  help_text: string;
+}
+
 export interface ConnectorType {
   id: string;
   name: string;
   category: string;
   icon: string;
   auth_method: string;
+  description: string;
+  events_per_day: string;
+  setup_guide_url: string;
+  fields: ConnectorField[];
+}
+
+export interface ConnectorCategory {
+  id: string;
+  name: string;
+  count: number;
+}
+
+export interface ConnectorCatalogResponse {
+  categories: ConnectorCategory[];
+  connectors: ConnectorType[];
 }
 
 export interface ConnectorSource {
   id: string;
   connector_type: string;
   name: string;
+  type_name: string;
+  type_icon: string;
+  category: string;
   status: string;
-  event_count: number;
+  events_today: number;
+  events_total: number;
   last_event_at: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface ConnectorOverview {
+  total_sources: number;
+  active_sources: number;
+  error_sources: number;
+  events_today: number;
+  categories: { id: string; sources: number; active: number; events_today: number }[];
+}
+
+export interface ConnectorTestResult {
+  success: boolean;
+  message: string;
+  events_sample: number;
 }
 
 export interface ScoreData {

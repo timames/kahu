@@ -25,7 +25,8 @@ class ConnectorInstance(Base, UUIDPrimaryKey, TimestampMixin):
     connector_type: Mapped[str] = mapped_column(String(64), index=True)
     name: Mapped[str] = mapped_column(String(128))
     status: Mapped[ConnectorStatus] = mapped_column(
-        SAEnum(ConnectorStatus, name="connector_status"),
+        SAEnum(ConnectorStatus, name="connector_status",
+               values_callable=lambda x: [e.value for e in x]),
         default=ConnectorStatus.PENDING,
     )
     config: Mapped[dict] = mapped_column(JSONB, default=dict)

@@ -11,8 +11,11 @@ import {
   Trophy,
   Settings,
   LogOut,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 
 interface NavItem {
   to: string;
@@ -36,6 +39,7 @@ const SETTINGS_ITEM: NavItem = { to: "/settings", icon: Settings, label: "Settin
 
 export function Layout() {
   const { username, logout } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const items = [...NAV_ITEMS, SETTINGS_ITEM];
 
@@ -70,9 +74,18 @@ export function Layout() {
         </div>
         <div className="border-t border-kahu-border px-5 py-3 flex items-center justify-between">
           <span className="text-xs text-slate-500 truncate">{username}</span>
-          <button onClick={logout} className="text-slate-500 hover:text-white transition-colors" title="Sign out">
-            <LogOut size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="text-slate-500 hover:text-white transition-colors"
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button onClick={logout} className="text-slate-500 hover:text-white transition-colors" title="Sign out">
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
       </nav>
 
