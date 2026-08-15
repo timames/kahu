@@ -7,7 +7,15 @@ import {
   type Profile,
   type ControlCoverage,
 } from "@/api/client";
-import { ChevronDown, ChevronUp, ClipboardCheck, CheckCircle2, Circle, AlertTriangle } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  ClipboardCheck,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  Target,
+} from "lucide-react";
 
 function coverageColor(pct: number): string {
   if (pct >= 80) return "text-green-400";
@@ -76,6 +84,9 @@ function FrameworkCard({ profile }: { profile: Profile }) {
   });
 
   const pct = coverage?.coverage_pct ?? 0;
+  const gapCount = coverage
+    ? coverage.total_controls - coverage.covered_controls - coverage.ready_controls
+    : 0;
 
   return (
     <div className="bg-kahu-card border border-kahu-border rounded-xl overflow-hidden">
@@ -88,8 +99,13 @@ function FrameworkCard({ profile }: { profile: Profile }) {
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-white truncate">{profile.framework_name}</h3>
-          <div className="text-xs text-slate-500 mt-0.5">
-            {profile.organization_name} · {profile.scope}
+          <div className="text-xs text-slate-500 mt-0.5">{profile.organization_name}</div>
+          <div className="flex items-start gap-1.5 mt-1.5 text-xs text-slate-400">
+            <Target size={13} className="text-slate-500 shrink-0 mt-0.5" />
+            <span className="min-w-0">
+              <span className="text-slate-500">Scope: </span>
+              {profile.scope}
+            </span>
           </div>
           <div className="flex items-center gap-2 mt-2">
             <div className="flex-1 h-1.5 rounded-full bg-kahu-elevated overflow-hidden max-w-xs">
@@ -103,8 +119,11 @@ function FrameworkCard({ profile }: { profile: Profile }) {
             </span>
           </div>
           {coverage && (
-            <div className="text-xs text-slate-600 mt-1">
-              {coverage.covered_controls} / {coverage.total_controls} controls covered
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs mt-1">
+              <span className="text-green-400">{coverage.covered_controls} met</span>
+              <span className="text-sky-400">{coverage.ready_controls} ready</span>
+              <span className="text-amber-400">{gapCount} gaps</span>
+              <span className="text-slate-600">of {coverage.total_controls}</span>
             </div>
           )}
         </div>
@@ -151,23 +170,29 @@ function ControlRow({ control }: { control: ControlCoverage }) {
     <div className="flex items-start gap-2 py-1.5 px-2 rounded-lg hover:bg-white/[0.02]">
       {control.covered ? (
         <CheckCircle2 size={15} className="text-green-400 shrink-0 mt-0.5" />
-      ) : control.gap ? (
-        <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5" />
+      ) : control.ready ? (
+        <Clock size={15} className="text-sky-400 shrink-0 mt-0.5" />
       ) : (
-        <Circle size={15} className="text-slate-600 shrink-0 mt-0.5" />
+        <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5" />
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono text-slate-400 shrink-0">{control.id}</span>
           <span className="text-xs text-slate-300 truncate">{control.title}</span>
         </div>
-        {control.covered && control.coverage_source && (
-          <div className="text-[10px] text-slate-600 mt-0.5">
-            {control.coverage_source}
-            {control.evidence_count > 0 && ` · ${control.evidence_count} evidence`}
-            {control.stale && <span className="text-amber-500"> · stale</span>}
-          </div>
-        )}
+        <div className="text-[10px] text-slate-600 mt-0.5">
+          {control.covered && control.coverage_source ? (
+            <>
+              {control.coverage_source}
+              {control.evidence_count > 0 && ` · ${control.evidence_count} evidence`}
+              {control.stale && <span className="text-amber-500"> · stale</span>}
+            </>
+          ) : control.ready ? (
+            <span className="text-sky-500">Kahu-capable — no evidence collected yet</span>
+          ) : (
+            <span className="text-amber-500">Gap — needs a manual or policy control</span>
+          )}
+        </div>
       </div>
     </div>
   );

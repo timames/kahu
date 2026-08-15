@@ -723,6 +723,7 @@ class ControlCoverage(BaseModel):
     id: str
     title: str
     covered: bool
+    ready: bool = False
     coverage_source: str | None = None
     evidence_type: str | None = None
     gap: bool = False
@@ -742,6 +743,7 @@ class CoverageMatrix(BaseModel):
     framework_name: str
     total_controls: int
     covered_controls: int
+    ready_controls: int
     coverage_pct: float
     families: list[FamilyCoverage]
 
@@ -794,6 +796,7 @@ async def get_coverage(
                 id=c.control_id,
                 title=c.title,
                 covered=c.covered,
+                ready=c.ready,
                 coverage_source=c.coverage_source,
                 evidence_type=c.evidence_type,
                 gap=c.gap,
@@ -816,6 +819,7 @@ async def get_coverage(
         framework_name=report.framework_name,
         total_controls=report.total_controls,
         covered_controls=report.covered_controls,
+        ready_controls=report.ready_controls,
         coverage_pct=report.coverage_pct,
         families=families,
     )

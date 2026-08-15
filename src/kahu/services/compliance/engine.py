@@ -33,7 +33,8 @@ class ControlStatus:
     control_id: str
     title: str
     tags: list[str]
-    covered: bool
+    covered: bool  # met — actual evidence has been collected
+    ready: bool = False  # Kahu-capable but no evidence collected yet
     coverage_source: str | None = None
     evidence_type: str | None = None  # "automated" | "capability" | None
     gap: bool = False
@@ -57,7 +58,8 @@ class CoverageReport:
     framework_id: str
     framework_name: str
     total_controls: int = 0
-    covered_controls: int = 0
+    covered_controls: int = 0  # met — evidence collected
+    ready_controls: int = 0  # Kahu-capable, awaiting evidence
     coverage_pct: float = 0.0
     stale_controls: int = 0
     gap_count: int = 0
@@ -210,6 +212,7 @@ async def compute_coverage(
     families: list[FamilyStatus] = []
     total = 0
     covered = 0
+    ready = 0
     stale = 0
     gaps = 0
 
@@ -220,6 +223,8 @@ async def compute_coverage(
             status = _evaluate_control(ctrl, all_evidence_tags, evidence_stats, cutoff)
             if status.covered:
                 covered += 1
+            if status.ready:
+                ready += 1
             if status.stale:
                 stale += 1
             if status.gap:
@@ -243,6 +248,7 @@ async def compute_coverage(
         framework_name=framework["name"],
         total_controls=total,
         covered_controls=covered,
+        ready_controls=ready,
         coverage_pct=round(covered / total * 100, 1) if total else 0,
         stale_controls=stale,
         gap_count=gaps,
@@ -325,20 +331,28 @@ def _evaluate_control(
             if ts and (latest is None or ts > latest):
                 latest = ts
 
+    # A control is only "met" (covered) when real evidence has actually been
+    # collected — capability alone is not an assessment result. Kahu-capable
+    # controls with no evidence yet are surfaced as "ready", not covered.
     is_stale = False
     if has_capability and has_evidence:
+        covered = True
+        ready = False
         coverage_source = "Kahu automated — evidence collected"
         evidence_type = "automated"
         if latest and latest < freshness_cutoff:
             is_stale = True
     elif has_capability:
+        covered = False
+        ready = True
         coverage_source = "Kahu capability — awaiting evidence"
         evidence_type = "capability"
     else:
+        covered = False
+        ready = False
         coverage_source = None
         evidence_type = None
 
-    covered = has_capability
     gap = not covered
 
     recommendation = _recommendation_for(tags) if gap else None
@@ -348,6 +362,7 @@ def _evaluate_control(
         title=ctrl["title"],
         tags=tags,
         covered=covered,
+        ready=ready,
         coverage_source=coverage_source,
         evidence_type=evidence_type,
         gap=gap,

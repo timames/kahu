@@ -128,8 +128,8 @@ export const getGaps = (frameworkId: string) =>
   request<GapAnalysis>(`/compliance/frameworks/${frameworkId}/gaps`);
 export const activateProfile = (
   frameworkId: string,
-  organizationName = "My Organization",
-  scope = "All systems",
+  organizationName: string,
+  scope: string,
 ) =>
   request<Profile>("/compliance/profiles", {
     method: "POST",
@@ -342,6 +342,7 @@ export interface ControlCoverage {
   id: string;
   title: string;
   covered: boolean;
+  ready: boolean;
   coverage_source: string | null;
   evidence_type: string | null;
   gap: boolean;
@@ -361,6 +362,7 @@ export interface CoverageMatrix {
   framework_name: string;
   total_controls: number;
   covered_controls: number;
+  ready_controls: number;
   coverage_pct: number;
   families: FamilyCoverage[];
 }
