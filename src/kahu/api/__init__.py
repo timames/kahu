@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 
+from kahu.api.agents import router as agents_router
 from kahu.api.arsenal import router as arsenal_router
 from kahu.api.auth import router as auth_router
 from kahu.api.briefing import router as briefing_router
@@ -44,3 +45,4 @@ router.include_router(pono_router, prefix="/pono", tags=["pono"], dependencies=_
 router.include_router(
     validation_router, prefix="/validation", tags=["validation"], dependencies=_auth
 )
+router.include_router(agents_router, prefix="/agents", tags=["agents"], dependencies=_auth)
