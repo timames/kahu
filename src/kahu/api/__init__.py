@@ -22,6 +22,10 @@ router = APIRouter()
 # Public routes — no auth required
 router.include_router(health_router, tags=["health"])
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
+# Agent install scripts must be fetchable from unenrolled hosts with no token.
+# They only expose the (non-secret) manager address and trigger Wazuh's
+# already-passwordless auto-enrollment.
+router.include_router(agents_router, prefix="/agents", tags=["agents"])
 
 # Protected routes — require valid JWT
 _auth = [Depends(get_current_user)]  # noqa: B008
@@ -45,4 +49,3 @@ router.include_router(pono_router, prefix="/pono", tags=["pono"], dependencies=_
 router.include_router(
     validation_router, prefix="/validation", tags=["validation"], dependencies=_auth
 )
-router.include_router(agents_router, prefix="/agents", tags=["agents"], dependencies=_auth)
