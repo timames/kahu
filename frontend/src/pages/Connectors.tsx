@@ -27,6 +27,7 @@ import {
   Loader2,
   Activity,
   AlertTriangle,
+  Download,
 } from "lucide-react";
 import { timeAgo } from "@/lib/severity";
 
@@ -98,6 +99,36 @@ export function Connectors() {
           />
         </div>
       )}
+
+      {/* Deploy agent */}
+      <div className="bg-kahu-card border border-kahu-border rounded-xl p-4 mb-6 flex flex-col md:flex-row md:items-center gap-3">
+        <div className="flex-1">
+          <h2 className="text-sm font-medium text-white mb-0.5">Deploy Wazuh Agent</h2>
+          <p className="text-xs text-slate-500">
+            Download and run the installer on a host to enroll it with this appliance.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <a
+            href="/api/agents/install.ps1"
+            download
+            className="flex items-center gap-1.5 px-3 py-2 bg-kahu-elevated border border-kahu-border
+                       rounded-lg text-sm text-white hover:border-kahu-accent/40 transition-colors"
+          >
+            <Download size={14} />
+            Windows
+          </a>
+          <a
+            href="/api/agents/install.sh"
+            download
+            className="flex items-center gap-1.5 px-3 py-2 bg-kahu-elevated border border-kahu-border
+                       rounded-lg text-sm text-white hover:border-kahu-accent/40 transition-colors"
+          >
+            <Download size={14} />
+            Linux / macOS
+          </a>
+        </div>
+      </div>
 
       {/* Active sources */}
       <h2 className="text-sm font-medium text-slate-400 mb-3">Active Sources</h2>
