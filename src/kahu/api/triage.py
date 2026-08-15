@@ -22,6 +22,8 @@ from kahu.schemas.triage import (
     HistoryResponse,
     PipelineStatusResponse,
     TriageQueueResponse,
+    WazuhLog,
+    WazuhLogsResponse,
 )
 from kahu.services.triage.disposition import record_disposition
 
@@ -128,6 +130,99 @@ async def alert_history(
         )
 
     return HistoryResponse(alerts=items, total=total, offset=offset, limit=limit)
+
+
+# Wazuh rule.level → Kahu severity band. These bounds mirror the mapping the
+# poller uses when it ingests alerts, so the "All logs" firehose and the triaged
+# queue label the same event identically.
+_SEVERITY_LEVEL_RANGES: dict[str, tuple[int, int]] = {
+    "critical": (13, 100),
+    "high": (10, 12),
+    "medium": (7, 9),
+    "low": (4, 6),
+    "info": (0, 3),
+}
+
+
+def _level_to_severity(level: int) -> str:
+    for band, (lo, hi) in _SEVERITY_LEVEL_RANGES.items():
+        if lo <= level <= hi:
+            return band
+    return "info"
+
+
+@router.get("/wazuh-logs", response_model=WazuhLogsResponse)
+async def wazuh_logs(
+    severity: str | None = Query(None, pattern="^(critical|high|medium|low|info)$"),  # noqa: B008
+    search: str | None = Query(None, max_length=200),  # noqa: B008
+    offset: int = Query(0, ge=0, le=9000),  # noqa: B008
+    limit: int = Query(100, ge=1, le=200),  # noqa: B008
+) -> WazuhLogsResponse:
+    """Browse the full Wazuh alert firehose straight from the indexer.
+
+    Unlike ``/queue`` and ``/history`` (which read Kahu's own DB of triaged
+    alerts), this streams every event Wazuh has indexed in ``wazuh-alerts-*`` —
+    the raw source of truth. Read-only: these are not Kahu alerts and carry no
+    disposition.
+    """
+    filters: list[dict] = []
+    if severity:
+        lo, hi = _SEVERITY_LEVEL_RANGES[severity]
+        filters.append({"range": {"rule.level": {"gte": lo, "lte": hi}}})
+
+    query: dict = {"match_all": {}}
+    if search:
+        query = {
+            "multi_match": {
+                "query": search,
+                "fields": ["rule.description", "agent.name", "data.srcip", "full_log"],
+                "type": "best_fields",
+                "lenient": True,
+            }
+        }
+
+    body = {
+        "from": offset,
+        "size": limit,
+        "sort": [{"timestamp": {"order": "desc"}}],
+        "query": {"bool": {"must": [query], "filter": filters}},
+    }
+
+    indexer = WazuhIndexerClient()
+    try:
+        result = await indexer.search(index="wazuh-alerts-*", query=body)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=503, detail="Wazuh indexer unavailable"
+        ) from exc
+
+    hits = result.get("hits", {})
+    total_raw = hits.get("total", 0)
+    total = total_raw.get("value", 0) if isinstance(total_raw, dict) else total_raw
+
+    logs: list[WazuhLog] = []
+    for hit in hits.get("hits", []):
+        src = hit.get("_source", {})
+        rule = src.get("rule", {}) or {}
+        agent = src.get("agent", {}) or {}
+        data = src.get("data", {}) or {}
+        level = int(rule.get("level", 0) or 0)
+        logs.append(
+            WazuhLog(
+                id=str(hit.get("_id", "")),
+                timestamp=src.get("timestamp") or src.get("@timestamp"),
+                rule_id=str(rule.get("id", "")),
+                rule_level=level,
+                severity=_level_to_severity(level),
+                rule_description=rule.get("description", "") or "",
+                agent_name=agent.get("name"),
+                src_ip=data.get("srcip"),
+                location=src.get("location"),
+                full_log=src.get("full_log"),
+            )
+        )
+
+    return WazuhLogsResponse(logs=logs, total=total, offset=offset, limit=limit)
 
 
 @router.get("/runbooks")

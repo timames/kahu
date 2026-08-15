@@ -85,6 +85,26 @@ class HistoryResponse(BaseModel):
     limit: int
 
 
+class WazuhLog(BaseModel):
+    id: str
+    timestamp: datetime | None
+    rule_id: str
+    rule_level: int
+    severity: str
+    rule_description: str
+    agent_name: str | None
+    src_ip: str | None
+    location: str | None
+    full_log: str | None
+
+
+class WazuhLogsResponse(BaseModel):
+    logs: list[WazuhLog]
+    total: int
+    offset: int
+    limit: int
+
+
 class PipelineBatchRequest(BaseModel):
     alerts: list[dict] = Field(..., min_length=1, max_length=100)
 

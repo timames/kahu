@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getQueue,
   getHistory,
+  getWazuhLogs,
   getSwipeFeed,
   disposeAlert,
   swipeAlert,
@@ -42,7 +43,7 @@ const VERDICT_COLOR: Record<string, string> = {
   undetermined: "text-amber-400 bg-amber-500/10",
 };
 
-/** Common shape both the pending queue and full history normalize to. */
+/** Common shape the pending queue, triaged history, and raw Wazuh logs all normalize to. */
 interface Row {
   id: string;
   severity: string;
@@ -53,6 +54,10 @@ interface Row {
   llm_explanation: string | null;
   verdict: string | null; // null = still pending / undispositioned
   degraded: boolean;
+  isLog?: boolean; // raw Wazuh indexer log — read-only, no disposition
+  fullLog?: string | null;
+  srcIp?: string | null;
+  level?: number;
 }
 
 export function Feed() {
@@ -85,12 +90,14 @@ export function Feed() {
 function ListFeed() {
   const queryClient = useQueryClient();
 
-  const [view, setView] = useState<"pending" | "all">("pending");
+  const [view, setView] = useState<"pending" | "triaged" | "logs">("pending");
   const [severity, setSeverity] = useState("");
   const [verdict, setVerdict] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"severity" | "newest" | "oldest">("severity");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [logsOffset, setLogsOffset] = useState(0);
+  const LOGS_PAGE = 100;
 
   const clearSelection = () => setSelected(new Set());
 
@@ -109,10 +116,27 @@ function ListFeed() {
         verdict: verdict || undefined,
         search: search || undefined,
       }),
-    enabled: view === "all",
+    enabled: view === "triaged",
   });
 
-  const isLoading = view === "pending" ? queueQuery.isLoading : historyQuery.isLoading;
+  const logsQuery = useQuery({
+    queryKey: ["wazuh-logs", severity, search, logsOffset],
+    queryFn: () =>
+      getWazuhLogs({
+        limit: LOGS_PAGE,
+        offset: logsOffset,
+        severity: severity || undefined,
+        search: search || undefined,
+      }),
+    enabled: view === "logs",
+  });
+
+  const isLoading =
+    view === "pending"
+      ? queueQuery.isLoading
+      : view === "triaged"
+        ? historyQuery.isLoading
+        : logsQuery.isLoading;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["queue"] });
@@ -159,7 +183,7 @@ function ListFeed() {
             (r.agent_name ?? "").toLowerCase().includes(q),
         );
       }
-    } else {
+    } else if (view === "triaged") {
       base = (historyQuery.data?.alerts ?? []).map((h) => ({
         id: h.id,
         severity: h.severity,
@@ -170,6 +194,22 @@ function ListFeed() {
         llm_explanation: h.llm_explanation,
         verdict: h.verdict,
         degraded: false,
+      }));
+    } else {
+      base = (logsQuery.data?.logs ?? []).map((l) => ({
+        id: l.id,
+        severity: l.severity,
+        rule_id: l.rule_id,
+        rule_description: l.rule_description,
+        agent_name: l.agent_name,
+        created_at: l.timestamp ?? "",
+        llm_explanation: null,
+        verdict: null,
+        degraded: false,
+        isLog: true,
+        fullLog: l.full_log,
+        srcIp: l.src_ip,
+        level: l.rule_level,
       }));
     }
 
@@ -186,15 +226,22 @@ function ListFeed() {
       sorted.sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at));
     }
     return sorted;
-  }, [view, queueQuery.data, historyQuery.data, search, sort]);
+  }, [view, queueQuery.data, historyQuery.data, logsQuery.data, search, sort]);
 
-  const selectableIds = rows.filter((r) => r.verdict === null).map((r) => r.id);
+  // Raw Wazuh logs carry no disposition, so they are never selectable.
+  const selectableIds =
+    view === "logs" ? [] : rows.filter((r) => r.verdict === null).map((r) => r.id);
   const allSelected = selectableIds.length > 0 && selected.size === selectableIds.length;
 
-  const switchView = (v: "pending" | "all") => {
+  const logsTotal = logsQuery.data?.total ?? 0;
+  const hasPrevPage = logsOffset > 0;
+  const hasNextPage = logsOffset + LOGS_PAGE < logsTotal;
+
+  const switchView = (v: "pending" | "triaged" | "logs") => {
     setView(v);
     clearSelection();
-    if (v === "pending") setVerdict("");
+    setLogsOffset(0);
+    if (v !== "triaged") setVerdict("");
   };
 
   const toggle = (id: string) =>
@@ -227,9 +274,17 @@ function ListFeed() {
             Pending
           </button>
           <button
-            onClick={() => switchView("all")}
+            onClick={() => switchView("triaged")}
             className={`px-3 py-1.5 transition-colors ${
-              view === "all" ? "bg-kahu-accent text-white" : "text-slate-400 hover:text-white"
+              view === "triaged" ? "bg-kahu-accent text-white" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            Triaged
+          </button>
+          <button
+            onClick={() => switchView("logs")}
+            className={`px-3 py-1.5 transition-colors ${
+              view === "logs" ? "bg-kahu-accent text-white" : "text-slate-400 hover:text-white"
             }`}
           >
             All logs
@@ -240,6 +295,7 @@ function ListFeed() {
           value={severity}
           onChange={(e) => {
             setSeverity(e.target.value);
+            setLogsOffset(0);
             clearSelection();
           }}
           className={selectClass}
@@ -252,7 +308,7 @@ function ListFeed() {
           <option value="info">Info</option>
         </select>
 
-        {view === "all" && (
+        {view === "triaged" && (
           <select
             value={verdict}
             onChange={(e) => setVerdict(e.target.value)}
@@ -281,7 +337,10 @@ function ListFeed() {
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setLogsOffset(0);
+            }}
             placeholder="Search rule, agent…"
             className="w-full pl-8 pr-2.5 py-1.5 rounded-lg text-xs bg-kahu-elevated border border-kahu-border text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-kahu-accent"
           />
@@ -299,7 +358,7 @@ function ListFeed() {
               className="h-4 w-4 rounded border-kahu-border bg-kahu-elevated accent-kahu-accent"
             />
             <span>
-              {selectableIds.length} pending{view === "all" ? ` of ${rows.length}` : ""}
+              {selectableIds.length} pending{view === "triaged" ? ` of ${rows.length}` : ""}
             </span>
           </label>
         </div>
@@ -349,19 +408,47 @@ function ListFeed() {
           <p>{view === "pending" ? "Queue clear — nothing to review." : "No matching logs."}</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {rows.map((row) => (
-            <AlertCard
-              key={row.id}
-              row={row}
-              selectable={row.verdict === null}
-              selected={selected.has(row.id)}
-              onToggleSelect={() => toggle(row.id)}
-              onDispose={(v) => dispose.mutate({ id: row.id, verdict: v })}
-              disposing={dispose.isPending}
-            />
-          ))}
-        </div>
+        <>
+          <div className="flex flex-col gap-3">
+            {rows.map((row) => (
+              <AlertCard
+                key={row.id}
+                row={row}
+                selectable={!row.isLog && row.verdict === null}
+                selected={selected.has(row.id)}
+                onToggleSelect={() => toggle(row.id)}
+                onDispose={(v) => dispose.mutate({ id: row.id, verdict: v })}
+                disposing={dispose.isPending}
+              />
+            ))}
+          </div>
+
+          {view === "logs" && (
+            <div className="flex items-center justify-between mt-4 text-xs text-slate-400">
+              <span>
+                {logsTotal > 0
+                  ? `${logsOffset + 1}–${logsOffset + rows.length} of ${logsTotal.toLocaleString()}`
+                  : `${rows.length} logs`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setLogsOffset((o) => Math.max(0, o - LOGS_PAGE))}
+                  disabled={!hasPrevPage}
+                  className="px-3 py-1.5 rounded-lg bg-kahu-elevated border border-kahu-border text-slate-300 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setLogsOffset((o) => o + LOGS_PAGE)}
+                  disabled={!hasNextPage}
+                  className="px-3 py-1.5 rounded-lg bg-kahu-elevated border border-kahu-border text-slate-300 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -435,6 +522,23 @@ function AlertCard({
 
       {expanded && (
         <div className="px-4 pb-4 border-t border-kahu-border pt-3">
+          {row.isLog && (
+            <div className="mb-3 flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                {typeof row.level === "number" && <span>Rule level {row.level}</span>}
+                {row.srcIp && <span>src: {row.srcIp}</span>}
+              </div>
+              {row.fullLog && (
+                <div>
+                  <div className="text-xs text-slate-500 mb-1 font-medium">Raw log</div>
+                  <pre className="text-xs text-slate-300 bg-kahu-elevated border border-kahu-border rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-words">
+                    {row.fullLog}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+
           {row.llm_explanation && (
             <div className="mb-3">
               <div className="text-xs text-slate-500 mb-1 font-medium">AI Analysis</div>
@@ -448,7 +552,11 @@ function AlertCard({
             </div>
           )}
 
-          {selectable ? (
+          {row.isLog ? (
+            <div className="text-xs text-slate-500">
+              Raw Wazuh event — indexed {row.created_at ? timeAgo(row.created_at) : "recently"}
+            </div>
+          ) : selectable ? (
             <div className="flex gap-2 mt-3">
               <button
                 onClick={() => onDispose("true_positive")}

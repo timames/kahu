@@ -77,6 +77,20 @@ export const getHistory = (
   return request<{ alerts: HistoryAlert[]; total: number }>(`/triage/history?${p}`);
 };
 
+export const getWazuhLogs = (
+  opts: { limit?: number; offset?: number; severity?: string; search?: string } = {},
+) => {
+  const p = new URLSearchParams({
+    limit: String(opts.limit ?? 100),
+    offset: String(opts.offset ?? 0),
+  });
+  if (opts.severity) p.set("severity", opts.severity);
+  if (opts.search) p.set("search", opts.search);
+  return request<{ logs: WazuhLog[]; total: number; offset: number; limit: number }>(
+    `/triage/wazuh-logs?${p}`,
+  );
+};
+
 export const disposeAlert = (alertId: string, verdict: string, notes = "") =>
   request(`/triage/alerts/${alertId}/disposition`, {
     method: "POST",
@@ -236,6 +250,19 @@ export interface HistoryAlert {
   analyst: string | null;
   disposition_at: string | null;
   llm_explanation: string | null;
+}
+
+export interface WazuhLog {
+  id: string;
+  timestamp: string | null;
+  rule_id: string;
+  rule_level: number;
+  severity: string;
+  rule_description: string;
+  agent_name: string | null;
+  src_ip: string | null;
+  location: string | null;
+  full_log: string | null;
 }
 
 export interface GlanceData {
