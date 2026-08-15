@@ -59,6 +59,14 @@ class Config:
     # ingest route accepts the webhook. Must match core's INGEST_TOKEN.
     KAHU_INGEST_TOKEN = os.getenv("KAHU_INGEST_TOKEN", "")
 
+    # Max alerts sent to the LLM-fed ingest per flush. Every synthetic syslog
+    # line also queues a webhook alert, and each ingested alert triggers an
+    # inline LLM triage. On-box inference sustains only ~20-30 alerts/min, so
+    # without a cap the buffer floods Ollama's queue and real triage requests
+    # time out (falling back to deterministic-only). Overflow is dropped — the
+    # same events still reach Wazuh via syslog for the SIEM side.
+    WEBHOOK_MAX_BATCH = _i("WEBHOOK_MAX_BATCH", 2)
+
     # --- synthetic org identity -----------------------------------------
     ORG_NAME = os.getenv("ORG_NAME", "Kai Pacific Engineering")
     ORG_DOMAIN = os.getenv("ORG_DOMAIN", "kaipacific.example")

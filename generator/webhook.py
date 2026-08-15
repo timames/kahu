@@ -113,8 +113,15 @@ def _flush() -> None:
     with _lock:
         if not _buffer:
             return
-        batch = _buffer[:]
+        # Cap the batch to a rate the on-box LLM can actually triage. Anything
+        # over the cap is dropped, not carried forward, so a high-intensity
+        # generator can't back up Ollama's queue past the ingest timeout.
+        batch = _buffer[:cfg.WEBHOOK_MAX_BATCH]
+        dropped = len(_buffer) - len(batch)
         _buffer.clear()
+    if dropped:
+        log.debug("webhook: dropped %d overflow alerts (cap=%d)",
+                  dropped, cfg.WEBHOOK_MAX_BATCH)
 
     headers = {}
     if cfg.KAHU_INGEST_TOKEN:
