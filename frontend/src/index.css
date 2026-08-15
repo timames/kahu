@@ -63,6 +63,22 @@
   .light .text-slate-600 { color: #cbd5e1 !important; }
 }
 
+@keyframes card-enter {
+  from {
+    transform: translateY(-120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Incoming swipe cards drop in from the top of the stack. */
+.card-enter {
+  animation: card-enter 0.35s ease-out;
+}
+
 @layer components {
   .severity-chip {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide;

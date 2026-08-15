@@ -44,18 +44,31 @@ export function Feed() {
   );
 }
 
-/* ── List Feed (original) ── */
+/* ── List Feed (with multi-select bulk actions) ── */
 
 function ListFeed() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["queue"], queryFn: () => getQueue(50) });
 
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["queue"] });
+    queryClient.invalidateQueries({ queryKey: ["triage-status"] });
+    queryClient.invalidateQueries({ queryKey: ["briefing"] });
+  };
+
   const dispose = useMutation({
     mutationFn: ({ id, verdict }: { id: string; verdict: string }) => disposeAlert(id, verdict),
+    onSuccess: invalidate,
+  });
+
+  const bulkDispose = useMutation({
+    mutationFn: ({ ids, verdict }: { ids: string[]; verdict: string }) =>
+      Promise.all(ids.map((id) => disposeAlert(id, verdict))),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["queue"] });
-      queryClient.invalidateQueries({ queryKey: ["triage-status"] });
-      queryClient.invalidateQueries({ queryKey: ["briefing"] });
+      setSelected(new Set());
+      invalidate();
     },
   });
 
@@ -74,14 +87,79 @@ function ListFeed() {
     );
   }
 
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const allSelected = selected.size === alerts.length;
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(alerts.map((a) => a.id)));
+
+  const applyBulk = (verdict: string) =>
+    bulkDispose.mutate({ ids: [...selected], verdict });
+
   return (
     <div>
-      <div className="text-sm text-slate-400 mb-3">{alerts.length} pending</div>
+      {/* Select-all header */}
+      <div className="flex items-center gap-2 mb-3 text-sm text-slate-400">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleAll}
+            className="h-4 w-4 rounded border-kahu-border bg-kahu-elevated accent-kahu-accent"
+          />
+          <span>{alerts.length} pending</span>
+        </label>
+      </div>
+
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-kahu-elevated border border-kahu-border sticky top-0 z-10">
+          <span className="text-xs text-slate-300 px-1">{selected.size} selected</span>
+          <div className="flex-1" />
+          <button
+            onClick={() => applyBulk("true_positive")}
+            disabled={bulkDispose.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+          >
+            <XCircle size={14} /> Confirm
+          </button>
+          <button
+            onClick={() => applyBulk("acknowledged")}
+            disabled={bulkDispose.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 transition-colors disabled:opacity-50"
+          >
+            <CheckCircle size={14} /> Acknowledge
+          </button>
+          <button
+            onClick={() => applyBulk("undetermined")}
+            disabled={bulkDispose.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+          >
+            <ArrowUpCircle size={14} /> Escalate
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            disabled={bulkDispose.isPending}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-white transition-colors disabled:opacity-50"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3">
         {alerts.map((alert) => (
           <AlertCard
             key={alert.id}
             alert={alert}
+            selected={selected.has(alert.id)}
+            onToggleSelect={() => toggle(alert.id)}
             onDispose={(verdict) => dispose.mutate({ id: alert.id, verdict })}
             disposing={dispose.isPending}
           />
@@ -93,38 +171,56 @@ function ListFeed() {
 
 function AlertCard({
   alert,
+  selected,
+  onToggleSelect,
   onDispose,
   disposing,
 }: {
   alert: Alert;
+  selected: boolean;
+  onToggleSelect: () => void;
   onDispose: (verdict: string) => void;
   disposing: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="bg-kahu-card border border-kahu-border rounded-xl overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-start gap-3 p-4 text-left hover:bg-white/[0.02] transition-colors"
-      >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`severity-chip ${severityClass(alert.severity)}`}>{alert.severity}</span>
-            <span className="text-xs text-slate-500">Rule {alert.rule_id}</span>
+    <div
+      className={`bg-kahu-card border rounded-xl overflow-hidden ${
+        selected ? "border-kahu-accent" : "border-kahu-border"
+      }`}
+    >
+      <div className="flex items-start">
+        <label className="flex items-center pl-4 pt-4 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            className="h-4 w-4 rounded border-kahu-border bg-kahu-elevated accent-kahu-accent"
+          />
+        </label>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex-1 min-w-0 flex items-start gap-3 p-4 text-left hover:bg-white/[0.02] transition-colors"
+        >
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`severity-chip ${severityClass(alert.severity)}`}>{alert.severity}</span>
+              <span className="text-xs text-slate-500">Rule {alert.rule_id}</span>
+            </div>
+            <p className="text-sm text-slate-200 leading-snug">{alert.rule_description}</p>
+            <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
+              {alert.agent_name && <span>{alert.agent_name}</span>}
+              <span>{timeAgo(alert.created_at)}</span>
+            </div>
           </div>
-          <p className="text-sm text-slate-200 leading-snug">{alert.rule_description}</p>
-          <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
-            {alert.agent_name && <span>{alert.agent_name}</span>}
-            <span>{timeAgo(alert.created_at)}</span>
-          </div>
-        </div>
-        {expanded ? (
-          <ChevronUp size={16} className="text-slate-500 mt-1" />
-        ) : (
-          <ChevronDown size={16} className="text-slate-500 mt-1" />
-        )}
-      </button>
+          {expanded ? (
+            <ChevronUp size={16} className="text-slate-500 mt-1" />
+          ) : (
+            <ChevronDown size={16} className="text-slate-500 mt-1" />
+          )}
+        </button>
+      </div>
 
       {expanded && (
         <div className="px-4 pb-4 border-t border-kahu-border pt-3">
@@ -253,8 +349,10 @@ function SwipeFeed() {
         </span>
       </div>
 
-      {/* Card */}
+      {/* Card — keyed so each incoming card mounts fresh and animates in
+          from the top instead of sliding back from the previous exit. */}
       <SwipeCardUI
+        key={card.id}
         card={card}
         exitDirection={exitDirection}
         onSwipe={handleSwipe}
@@ -378,7 +476,7 @@ function SwipeCardUI({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       style={style}
-      className={`w-full max-w-md bg-kahu-card border-2 ${tint || "border-kahu-border"} rounded-2xl p-5
+      className={`card-enter w-full max-w-md bg-kahu-card border-2 ${tint || "border-kahu-border"} rounded-2xl p-5
                   cursor-grab active:cursor-grabbing select-none touch-none`}
     >
       {/* Severity + agent */}
