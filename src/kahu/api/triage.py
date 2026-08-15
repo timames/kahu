@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func, select
@@ -20,6 +21,7 @@ from kahu.schemas.triage import (
     DispositionOut,
     HistoryAlertSummary,
     HistoryResponse,
+    LogStorageResponse,
     PipelineStatusResponse,
     TriageQueueResponse,
     WazuhLog,
@@ -223,6 +225,95 @@ async def wazuh_logs(
         )
 
     return WazuhLogsResponse(logs=logs, total=total, offset=offset, limit=limit)
+
+
+def _sum_disk_bytes(allocation: list) -> tuple[int, int, int]:
+    """Sum total/used/available disk bytes across the indexer's data nodes.
+
+    ``_cat/allocation`` returns one row per node plus (sometimes) an UNASSIGNED
+    row with empty disk fields; those are skipped. Requested with bytes=b so
+    every field is a plain integer string.
+    """
+    total = used = avail = 0
+    for row in allocation:
+        if not row.get("node") or row.get("node") == "UNASSIGNED":
+            continue
+        try:
+            total += int(row.get("disk.total") or 0)
+            used += int(row.get("disk.used") or 0)
+            avail += int(row.get("disk.avail") or 0)
+        except (TypeError, ValueError):
+            continue
+    return total, used, avail
+
+
+@router.get("/log-storage", response_model=LogStorageResponse)
+async def log_storage() -> LogStorageResponse:
+    """Estimate how long Wazuh logs can be retained before disk fills.
+
+    Reads live indexer telemetry — cluster disk allocation, the ``wazuh-alerts-*``
+    store size and doc count, and the timestamp span of stored logs — then
+    projects the current ingest rate against free disk to answer "how many days
+    of logs can we hold before old ones must roll off."
+    """
+    indexer = WazuhIndexerClient()
+    try:
+        allocation = await indexer.get("_cat/allocation", {"format": "json", "bytes": "b"})
+        stats = await indexer.get("wazuh-alerts-*/_stats/store,docs")
+        span = await indexer.search(
+            index="wazuh-alerts-*",
+            query={
+                "size": 0,
+                "aggs": {
+                    "min_ts": {"min": {"field": "timestamp"}},
+                    "max_ts": {"max": {"field": "timestamp"}},
+                },
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail="Wazuh indexer unavailable") from exc
+
+    disk_total, disk_used, disk_avail = _sum_disk_bytes(
+        allocation if isinstance(allocation, list) else []
+    )
+
+    all_total = ((stats or {}).get("_all", {}) or {}).get("total", {}) or {}
+    logs_size = int((all_total.get("store", {}) or {}).get("size_in_bytes", 0) or 0)
+    logs_docs = int((all_total.get("docs", {}) or {}).get("count", 0) or 0)
+
+    aggs = (span or {}).get("aggregations", {}) or {}
+    min_ms = (aggs.get("min_ts", {}) or {}).get("value")
+    max_ms = (aggs.get("max_ts", {}) or {}).get("value")
+    oldest = datetime.fromtimestamp(min_ms / 1000, tz=UTC) if min_ms else None
+    newest = datetime.fromtimestamp(max_ms / 1000, tz=UTC) if max_ms else None
+
+    span_days = 0.0
+    if oldest and newest:
+        span_days = max((newest - oldest).total_seconds() / 86400.0, 0.0)
+
+    # Below a meaningful window the per-day rate is noise, so leave the
+    # projections at zero rather than reporting a wild extrapolation.
+    bytes_per_day = logs_size / span_days if span_days > 0.01 and logs_size > 0 else 0.0
+    docs_per_day = logs_docs / span_days if span_days > 0.01 and logs_docs > 0 else 0.0
+
+    days_until_full = disk_avail / bytes_per_day if bytes_per_day > 0 else 0.0
+    total_capacity_days = (disk_avail + logs_size) / bytes_per_day if bytes_per_day > 0 else 0.0
+
+    return LogStorageResponse(
+        disk_total_bytes=disk_total,
+        disk_used_bytes=disk_used,
+        disk_available_bytes=disk_avail,
+        logs_size_bytes=logs_size,
+        logs_doc_count=logs_docs,
+        oldest_log=oldest,
+        newest_log=newest,
+        span_days=round(span_days, 2),
+        bytes_per_day=round(bytes_per_day, 2),
+        docs_per_day=round(docs_per_day, 2),
+        retention_days_current=round(span_days, 2),
+        days_until_full=round(days_until_full, 1),
+        total_capacity_days=round(total_capacity_days, 1),
+    )
 
 
 @router.get("/runbooks")

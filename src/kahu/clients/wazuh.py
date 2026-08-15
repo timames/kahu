@@ -83,3 +83,14 @@ class WazuhIndexerClient:
             )
             resp.raise_for_status()
             return resp.json()
+
+    async def get(self, path: str, params: dict | None = None) -> dict | list:
+        """Generic authenticated GET against the indexer (e.g. _cat, _stats)."""
+        async with httpx.AsyncClient(verify=False, timeout=15) as client:  # noqa: S501
+            resp = await client.get(
+                f"{self.base_url}/{path.lstrip('/')}",
+                params=params,
+                auth=self.auth,
+            )
+            resp.raise_for_status()
+            return resp.json()

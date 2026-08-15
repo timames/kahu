@@ -4,10 +4,12 @@ import {
   getQueue,
   getHistory,
   getWazuhLogs,
+  getLogStorage,
   getSwipeFeed,
   disposeAlert,
   swipeAlert,
   type SwipeCard,
+  type LogStorage,
 } from "@/api/client";
 import { severityClass, timeAgo } from "@/lib/severity";
 import {
@@ -19,6 +21,7 @@ import {
   Layers,
   CreditCard,
   Search,
+  HardDrive,
 } from "lucide-react";
 
 const SEV_RANK: Record<string, number> = {
@@ -129,6 +132,13 @@ function ListFeed() {
         search: search || undefined,
       }),
     enabled: view === "logs",
+  });
+
+  const storageQuery = useQuery({
+    queryKey: ["log-storage"],
+    queryFn: getLogStorage,
+    enabled: view === "logs",
+    staleTime: 60_000,
   });
 
   const isLoading =
@@ -347,6 +357,11 @@ function ListFeed() {
         </div>
       </div>
 
+      {/* Storage / retention summary (All logs view only) */}
+      {view === "logs" && (
+        <StoragePanel data={storageQuery.data} loading={storageQuery.isLoading} />
+      )}
+
       {/* Select-all header (pending rows only) */}
       {selectableIds.length > 0 && (
         <div className="flex items-center gap-2 mb-3 text-sm text-slate-400">
@@ -450,6 +465,121 @@ function ListFeed() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/* ── Storage / retention panel ── */
+
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes < 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function formatDays(days: number): string {
+  if (!days || days <= 0) return "—";
+  if (days < 1) return "<1 day";
+  if (days < 90) return `${Math.round(days)} days`;
+  const months = days / 30.44;
+  if (days < 730) return `${months.toFixed(1)} months`;
+  return `${(days / 365.25).toFixed(1)} years`;
+}
+
+function StoragePanel({ data, loading }: { data?: LogStorage; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="mb-3 p-4 rounded-xl bg-kahu-card border border-kahu-border text-xs text-slate-500">
+        Loading storage telemetry…
+      </div>
+    );
+  }
+  if (!data) {
+    return (
+      <div className="mb-3 p-4 rounded-xl bg-kahu-card border border-kahu-border text-xs text-amber-400">
+        Storage telemetry unavailable — Wazuh indexer not reachable.
+      </div>
+    );
+  }
+
+  const usedPct =
+    data.disk_total_bytes > 0
+      ? Math.min(100, (data.disk_used_bytes / data.disk_total_bytes) * 100)
+      : 0;
+  const barColor = usedPct >= 90 ? "bg-red-400" : usedPct >= 75 ? "bg-amber-400" : "bg-green-400";
+  const hasRate = data.bytes_per_day > 0;
+
+  return (
+    <div className="mb-3 p-4 rounded-xl bg-kahu-card border border-kahu-border">
+      <div className="flex items-center gap-2 mb-3">
+        <HardDrive size={16} className="text-kahu-accent" />
+        <h3 className="text-sm font-semibold text-white">Log retention</h3>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+        <Metric
+          label="Retention capacity"
+          value={hasRate ? formatDays(data.total_capacity_days) : "—"}
+          hint="before logs roll off"
+          accent
+        />
+        <Metric
+          label="Time to full"
+          value={hasRate ? formatDays(data.days_until_full) : "—"}
+          hint="free disk at current rate"
+        />
+        <Metric
+          label="Currently stored"
+          value={formatDays(data.span_days)}
+          hint={`${data.logs_doc_count.toLocaleString()} events`}
+        />
+        <Metric
+          label="Ingest rate"
+          value={hasRate ? `${formatBytes(data.bytes_per_day)}/day` : "—"}
+          hint={
+            data.docs_per_day > 0
+              ? `${Math.round(data.docs_per_day).toLocaleString()} events/day`
+              : "insufficient history"
+          }
+        />
+      </div>
+
+      <div className="flex items-center gap-2 text-xs text-slate-400">
+        <div className="flex-1 h-1.5 rounded-full bg-kahu-elevated overflow-hidden">
+          <div className={`h-full ${barColor} transition-all`} style={{ width: `${usedPct}%` }} />
+        </div>
+        <span className="shrink-0">
+          {formatBytes(data.disk_used_bytes)} / {formatBytes(data.disk_total_bytes)} disk (
+          {Math.round(usedPct)}%)
+        </span>
+      </div>
+      <div className="mt-1 text-[11px] text-slate-600">
+        Logs occupy {formatBytes(data.logs_size_bytes)}. Estimates project the current ingest rate
+        against free disk; actual retention depends on index lifecycle policies.
+      </div>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  hint,
+  accent,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  accent?: boolean;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`text-lg font-semibold ${accent ? "text-kahu-accent" : "text-white"}`}>
+        {value}
+      </div>
+      {hint && <div className="text-[11px] text-slate-600">{hint}</div>}
     </div>
   );
 }

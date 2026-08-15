@@ -91,6 +91,8 @@ export const getWazuhLogs = (
   );
 };
 
+export const getLogStorage = () => request<LogStorage>("/triage/log-storage");
+
 export const disposeAlert = (alertId: string, verdict: string, notes = "") =>
   request(`/triage/alerts/${alertId}/disposition`, {
     method: "POST",
@@ -263,6 +265,22 @@ export interface WazuhLog {
   src_ip: string | null;
   location: string | null;
   full_log: string | null;
+}
+
+export interface LogStorage {
+  disk_total_bytes: number;
+  disk_used_bytes: number;
+  disk_available_bytes: number;
+  logs_size_bytes: number;
+  logs_doc_count: number;
+  oldest_log: string | null;
+  newest_log: string | null;
+  span_days: number;
+  bytes_per_day: number;
+  docs_per_day: number;
+  retention_days_current: number;
+  days_until_full: number;
+  total_capacity_days: number;
 }
 
 export interface GlanceData {

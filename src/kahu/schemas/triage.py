@@ -105,6 +105,22 @@ class WazuhLogsResponse(BaseModel):
     limit: int
 
 
+class LogStorageResponse(BaseModel):
+    disk_total_bytes: int
+    disk_used_bytes: int
+    disk_available_bytes: int
+    logs_size_bytes: int
+    logs_doc_count: int
+    oldest_log: datetime | None
+    newest_log: datetime | None
+    span_days: float
+    bytes_per_day: float
+    docs_per_day: float
+    retention_days_current: float
+    days_until_full: float
+    total_capacity_days: float
+
+
 class PipelineBatchRequest(BaseModel):
     alerts: list[dict] = Field(..., min_length=1, max_length=100)
 
