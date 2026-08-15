@@ -61,5 +61,10 @@ class Settings(BaseSettings):
     # Agent deployment — the external IP/hostname agents should connect to
     appliance_host: str = ""
 
+    # Shared secret for machine-to-machine alert ingestion (the demo generator
+    # and any external forwarder POSTing to /api/triage/ingest). Empty disables
+    # the token-authenticated ingest route entirely.
+    ingest_token: str = ""
+
 
 settings = Settings()

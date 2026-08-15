@@ -8,6 +8,7 @@ from kahu.api.compliance import router as compliance_router
 from kahu.api.connectors import router as connectors_router
 from kahu.api.deps import get_current_user
 from kahu.api.health import router as health_router
+from kahu.api.ingest import router as ingest_router
 from kahu.api.investigation import router as investigation_router
 from kahu.api.mobile import router as mobile_router
 from kahu.api.pono import router as pono_router
@@ -26,6 +27,11 @@ router.include_router(auth_router, prefix="/auth", tags=["auth"])
 # They only expose the (non-secret) manager address and trigger Wazuh's
 # already-passwordless auto-enrollment.
 router.include_router(agents_router, prefix="/agents", tags=["agents"])
+# Machine-to-machine alert ingestion. Not user-facing, so no JWT — the route
+# authenticates with the shared INGEST_TOKEN secret (see kahu.api.ingest).
+# Mounted under /triage alongside the protected triage router below; only the
+# single POST /triage/ingest route lives here.
+router.include_router(ingest_router, prefix="/triage", tags=["ingest"])
 
 # Protected routes — require valid JWT
 _auth = [Depends(get_current_user)]  # noqa: B008

@@ -55,6 +55,9 @@ class Config:
     # --- Kahu ingest (webhook) ----------------------------------------
     KAHU_HOST = os.getenv("KAHU_HOST", "kahu-core:8000")
     KAHU_INGEST_URL = os.getenv("KAHU_INGEST_URL", "")
+    # Shared secret sent as X-Ingest-Token so Kahu's token-authenticated
+    # ingest route accepts the webhook. Must match core's INGEST_TOKEN.
+    KAHU_INGEST_TOKEN = os.getenv("KAHU_INGEST_TOKEN", "")
 
     # --- synthetic org identity -----------------------------------------
     ORG_NAME = os.getenv("ORG_NAME", "Kai Pacific Engineering")

@@ -200,6 +200,8 @@ services:
       TIMEZONE: Pacific/Honolulu
       API_TOKEN: demo-local-token
       KAHU_HOST: core:8000
+      # Must match core's INGEST_TOKEN (set in .env) so the webhook authenticates.
+      KAHU_INGEST_TOKEN: ${INGEST_TOKEN:-}
     ports:
       - "8080:8080"
     depends_on:

@@ -116,9 +116,13 @@ def _flush() -> None:
         batch = _buffer[:]
         _buffer.clear()
 
+    headers = {}
+    if cfg.KAHU_INGEST_TOKEN:
+        headers["X-Ingest-Token"] = cfg.KAHU_INGEST_TOKEN
+
     try:
         with httpx.Client(timeout=10.0) as client:
-            resp = client.post(KAHU_INGEST_URL, json={"alerts": batch})
+            resp = client.post(KAHU_INGEST_URL, json={"alerts": batch}, headers=headers)
             if resp.status_code == 200:
                 _counter["sent"] += len(batch)
                 log.info("webhook: flushed %d alerts to Kahu", len(batch))

@@ -20,13 +20,10 @@ from kahu.schemas.triage import (
     DispositionOut,
     HistoryAlertSummary,
     HistoryResponse,
-    PipelineBatchRequest,
-    PipelineBatchResponse,
     PipelineStatusResponse,
     TriageQueueResponse,
 )
 from kahu.services.triage.disposition import record_disposition
-from kahu.services.triage.pipeline import run_pipeline_batch
 
 router = APIRouter()
 
@@ -193,31 +190,6 @@ async def disposition_alert(
         analyst=disposition.analyst,
         notes=disposition.notes,
         created_at=disposition.created_at,
-    )
-
-
-@router.post("/ingest", response_model=PipelineBatchResponse)
-async def ingest_alerts(
-    body: PipelineBatchRequest,
-    session: AsyncSession = Depends(get_session),  # noqa: B008
-) -> PipelineBatchResponse:
-    """Ingest a batch of raw Wazuh alerts through the triage pipeline."""
-    indexer = WazuhIndexerClient()
-    ollama = OllamaClient()
-
-    _, stats = await run_pipeline_batch(
-        raw_alerts=body.alerts,
-        session=session,
-        indexer=indexer,
-        ollama=ollama,
-    )
-
-    return PipelineBatchResponse(
-        processed=stats.total,
-        filtered=stats.filtered,
-        triaged=stats.triaged,
-        persisted=stats.persisted,
-        errors=stats.errors,
     )
 
 
