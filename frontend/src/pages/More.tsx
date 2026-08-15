@@ -1,6 +1,8 @@
 import { NavLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   ShieldCheck,
+  ClipboardCheck,
   Cable,
   Radar,
   Swords,
@@ -8,6 +10,7 @@ import {
   Settings,
   ChevronRight,
 } from "lucide-react";
+import { getProfiles } from "@/api/client";
 import { useSettings } from "@/hooks/useSettings";
 
 const ITEMS = [
@@ -17,13 +20,16 @@ const ITEMS = [
   { to: "/arsenal", icon: Swords, label: "Arsenal", desc: "Offensive tools" },
 ];
 
+const GRC_ITEM = { to: "/grc", icon: ClipboardCheck, label: "GRC", desc: "Selected framework coverage" };
 const SCORE_ITEM = { to: "/score", icon: Trophy, label: "Score", desc: "XP, badges, tickets" };
 const SETTINGS_ITEM = { to: "/settings", icon: Settings, label: "Settings", desc: "Preferences" };
 
 export function More() {
   const { gamificationEnabled } = useSettings();
+  const { data: profiles } = useQuery({ queryKey: ["profiles"], queryFn: getProfiles });
 
   const items = [...ITEMS];
+  if ((profiles?.length ?? 0) > 0) items.splice(1, 0, GRC_ITEM);
   if (gamificationEnabled) items.push(SCORE_ITEM);
   items.push(SETTINGS_ITEM);
 

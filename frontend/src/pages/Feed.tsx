@@ -1,11 +1,11 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getQueue,
+  getHistory,
   getSwipeFeed,
   disposeAlert,
   swipeAlert,
-  type Alert,
   type SwipeCard,
 } from "@/api/client";
 import { severityClass, timeAgo } from "@/lib/severity";
@@ -17,7 +17,43 @@ import {
   ChevronUp,
   Layers,
   CreditCard,
+  Search,
 } from "lucide-react";
+
+const SEV_RANK: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
+};
+
+const VERDICT_LABEL: Record<string, string> = {
+  true_positive: "Confirmed",
+  false_positive: "False positive",
+  acknowledged: "Acknowledged",
+  undetermined: "Escalated",
+};
+
+const VERDICT_COLOR: Record<string, string> = {
+  true_positive: "text-red-400 bg-red-500/10",
+  false_positive: "text-slate-400 bg-slate-500/10",
+  acknowledged: "text-green-400 bg-green-500/10",
+  undetermined: "text-amber-400 bg-amber-500/10",
+};
+
+/** Common shape both the pending queue and full history normalize to. */
+interface Row {
+  id: string;
+  severity: string;
+  rule_id: string;
+  rule_description: string;
+  agent_name: string | null;
+  created_at: string;
+  llm_explanation: string | null;
+  verdict: string | null; // null = still pending / undispositioned
+  degraded: boolean;
+}
 
 export function Feed() {
   const [swipeMode, setSwipeMode] = useState(false);
@@ -44,16 +80,43 @@ export function Feed() {
   );
 }
 
-/* ── List Feed (with multi-select bulk actions) ── */
+/* ── List Feed (multi-select, sort, filter, all-logs view) ── */
 
 function ListFeed() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ["queue"], queryFn: () => getQueue(50) });
 
+  const [view, setView] = useState<"pending" | "all">("pending");
+  const [severity, setSeverity] = useState("");
+  const [verdict, setVerdict] = useState("");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"severity" | "newest" | "oldest">("severity");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const clearSelection = () => setSelected(new Set());
+
+  const queueQuery = useQuery({
+    queryKey: ["queue", severity],
+    queryFn: () => getQueue(200, severity || undefined),
+    enabled: view === "pending",
+  });
+
+  const historyQuery = useQuery({
+    queryKey: ["history", severity, verdict, search],
+    queryFn: () =>
+      getHistory({
+        limit: 200,
+        severity: severity || undefined,
+        verdict: verdict || undefined,
+        search: search || undefined,
+      }),
+    enabled: view === "all",
+  });
+
+  const isLoading = view === "pending" ? queueQuery.isLoading : historyQuery.isLoading;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["queue"] });
+    queryClient.invalidateQueries({ queryKey: ["history"] });
     queryClient.invalidateQueries({ queryKey: ["triage-status"] });
     queryClient.invalidateQueries({ queryKey: ["briefing"] });
   };
@@ -67,25 +130,72 @@ function ListFeed() {
     mutationFn: ({ ids, verdict }: { ids: string[]; verdict: string }) =>
       Promise.all(ids.map((id) => disposeAlert(id, verdict))),
     onSuccess: () => {
-      setSelected(new Set());
+      clearSelection();
       invalidate();
     },
   });
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-64 text-slate-400">Loading alerts...</div>;
-  }
+  const rows = useMemo<Row[]>(() => {
+    let base: Row[];
+    if (view === "pending") {
+      base = (queueQuery.data?.alerts ?? []).map((a) => ({
+        id: a.id,
+        severity: a.severity,
+        rule_id: a.rule_id,
+        rule_description: a.rule_description,
+        agent_name: a.agent_name,
+        created_at: a.created_at,
+        llm_explanation: a.llm_explanation,
+        verdict: null,
+        degraded: a.degraded,
+      }));
+      // The queue endpoint has no server-side search, so filter locally.
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        base = base.filter(
+          (r) =>
+            r.rule_description.toLowerCase().includes(q) ||
+            r.rule_id.toLowerCase().includes(q) ||
+            (r.agent_name ?? "").toLowerCase().includes(q),
+        );
+      }
+    } else {
+      base = (historyQuery.data?.alerts ?? []).map((h) => ({
+        id: h.id,
+        severity: h.severity,
+        rule_id: h.rule_id,
+        rule_description: h.rule_description,
+        agent_name: h.agent_name,
+        created_at: h.created_at,
+        llm_explanation: h.llm_explanation,
+        verdict: h.verdict,
+        degraded: false,
+      }));
+    }
 
-  const alerts = data?.alerts ?? [];
+    const sorted = [...base];
+    if (sort === "severity") {
+      sorted.sort(
+        (a, b) =>
+          (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9) ||
+          +new Date(b.created_at) - +new Date(a.created_at),
+      );
+    } else if (sort === "newest") {
+      sorted.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+    } else {
+      sorted.sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at));
+    }
+    return sorted;
+  }, [view, queueQuery.data, historyQuery.data, search, sort]);
 
-  if (alerts.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-2">
-        <CheckCircle size={32} className="text-green-400" />
-        <p>Queue clear — nothing to review.</p>
-      </div>
-    );
-  }
+  const selectableIds = rows.filter((r) => r.verdict === null).map((r) => r.id);
+  const allSelected = selectableIds.length > 0 && selected.size === selectableIds.length;
+
+  const switchView = (v: "pending" | "all") => {
+    setView(v);
+    clearSelection();
+    if (v === "pending") setVerdict("");
+  };
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -95,27 +205,105 @@ function ListFeed() {
       return next;
     });
 
-  const allSelected = selected.size === alerts.length;
   const toggleAll = () =>
-    setSelected(allSelected ? new Set() : new Set(alerts.map((a) => a.id)));
+    setSelected(allSelected ? new Set() : new Set(selectableIds));
 
-  const applyBulk = (verdict: string) =>
-    bulkDispose.mutate({ ids: [...selected], verdict });
+  const applyBulk = (v: string) => bulkDispose.mutate({ ids: [...selected], verdict: v });
+
+  const selectClass =
+    "px-2.5 py-1.5 rounded-lg text-xs bg-kahu-elevated border border-kahu-border text-slate-300 focus:outline-none focus:border-kahu-accent";
 
   return (
     <div>
-      {/* Select-all header */}
-      <div className="flex items-center gap-2 mb-3 text-sm text-slate-400">
-        <label className="flex items-center gap-2 cursor-pointer select-none">
+      {/* View toggle + filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="flex rounded-lg bg-kahu-elevated border border-kahu-border overflow-hidden text-xs font-medium">
+          <button
+            onClick={() => switchView("pending")}
+            className={`px-3 py-1.5 transition-colors ${
+              view === "pending" ? "bg-kahu-accent text-white" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            Pending
+          </button>
+          <button
+            onClick={() => switchView("all")}
+            className={`px-3 py-1.5 transition-colors ${
+              view === "all" ? "bg-kahu-accent text-white" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            All logs
+          </button>
+        </div>
+
+        <select
+          value={severity}
+          onChange={(e) => {
+            setSeverity(e.target.value);
+            clearSelection();
+          }}
+          className={selectClass}
+        >
+          <option value="">All severities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="info">Info</option>
+        </select>
+
+        {view === "all" && (
+          <select
+            value={verdict}
+            onChange={(e) => setVerdict(e.target.value)}
+            className={selectClass}
+          >
+            <option value="">All verdicts</option>
+            <option value="pending">Pending</option>
+            <option value="true_positive">Confirmed</option>
+            <option value="false_positive">False positive</option>
+            <option value="acknowledged">Acknowledged</option>
+            <option value="undetermined">Escalated</option>
+          </select>
+        )}
+
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as typeof sort)}
+          className={selectClass}
+        >
+          <option value="severity">Severity</option>
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+        </select>
+
+        <div className="relative flex-1 min-w-[140px]">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
-            type="checkbox"
-            checked={allSelected}
-            onChange={toggleAll}
-            className="h-4 w-4 rounded border-kahu-border bg-kahu-elevated accent-kahu-accent"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search rule, agent…"
+            className="w-full pl-8 pr-2.5 py-1.5 rounded-lg text-xs bg-kahu-elevated border border-kahu-border text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-kahu-accent"
           />
-          <span>{alerts.length} pending</span>
-        </label>
+        </div>
       </div>
+
+      {/* Select-all header (pending rows only) */}
+      {selectableIds.length > 0 && (
+        <div className="flex items-center gap-2 mb-3 text-sm text-slate-400">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleAll}
+              className="h-4 w-4 rounded border-kahu-border bg-kahu-elevated accent-kahu-accent"
+            />
+            <span>
+              {selectableIds.length} pending{view === "all" ? ` of ${rows.length}` : ""}
+            </span>
+          </label>
+        </div>
+      )}
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
@@ -144,7 +332,7 @@ function ListFeed() {
             <ArrowUpCircle size={14} /> Escalate
           </button>
           <button
-            onClick={() => setSelected(new Set())}
+            onClick={clearSelection}
             disabled={bulkDispose.isPending}
             className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-white transition-colors disabled:opacity-50"
           >
@@ -153,30 +341,42 @@ function ListFeed() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
-        {alerts.map((alert) => (
-          <AlertCard
-            key={alert.id}
-            alert={alert}
-            selected={selected.has(alert.id)}
-            onToggleSelect={() => toggle(alert.id)}
-            onDispose={(verdict) => dispose.mutate({ id: alert.id, verdict })}
-            disposing={dispose.isPending}
-          />
-        ))}
-      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64 text-slate-400">Loading alerts...</div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-2">
+          <CheckCircle size={32} className="text-green-400" />
+          <p>{view === "pending" ? "Queue clear — nothing to review." : "No matching logs."}</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {rows.map((row) => (
+            <AlertCard
+              key={row.id}
+              row={row}
+              selectable={row.verdict === null}
+              selected={selected.has(row.id)}
+              onToggleSelect={() => toggle(row.id)}
+              onDispose={(v) => dispose.mutate({ id: row.id, verdict: v })}
+              disposing={dispose.isPending}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 function AlertCard({
-  alert,
+  row,
+  selectable,
   selected,
   onToggleSelect,
   onDispose,
   disposing,
 }: {
-  alert: Alert;
+  row: Row;
+  selectable: boolean;
   selected: boolean;
   onToggleSelect: () => void;
   onDispose: (verdict: string) => void;
@@ -191,27 +391,38 @@ function AlertCard({
       }`}
     >
       <div className="flex items-start">
-        <label className="flex items-center pl-4 pt-4 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={onToggleSelect}
-            className="h-4 w-4 rounded border-kahu-border bg-kahu-elevated accent-kahu-accent"
-          />
-        </label>
+        {selectable && (
+          <label className="flex items-center pl-4 pt-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelect}
+              className="h-4 w-4 rounded border-kahu-border bg-kahu-elevated accent-kahu-accent"
+            />
+          </label>
+        )}
         <button
           onClick={() => setExpanded(!expanded)}
           className="flex-1 min-w-0 flex items-start gap-3 p-4 text-left hover:bg-white/[0.02] transition-colors"
         >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className={`severity-chip ${severityClass(alert.severity)}`}>{alert.severity}</span>
-              <span className="text-xs text-slate-500">Rule {alert.rule_id}</span>
+              <span className={`severity-chip ${severityClass(row.severity)}`}>{row.severity}</span>
+              <span className="text-xs text-slate-500">Rule {row.rule_id}</span>
+              {row.verdict && (
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
+                    VERDICT_COLOR[row.verdict] ?? "text-slate-400 bg-slate-500/10"
+                  }`}
+                >
+                  {VERDICT_LABEL[row.verdict] ?? row.verdict}
+                </span>
+              )}
             </div>
-            <p className="text-sm text-slate-200 leading-snug">{alert.rule_description}</p>
+            <p className="text-sm text-slate-200 leading-snug">{row.rule_description}</p>
             <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
-              {alert.agent_name && <span>{alert.agent_name}</span>}
-              <span>{timeAgo(alert.created_at)}</span>
+              {row.agent_name && <span>{row.agent_name}</span>}
+              <span>{timeAgo(row.created_at)}</span>
             </div>
           </div>
           {expanded ? (
@@ -224,42 +435,48 @@ function AlertCard({
 
       {expanded && (
         <div className="px-4 pb-4 border-t border-kahu-border pt-3">
-          {alert.llm_explanation && (
+          {row.llm_explanation && (
             <div className="mb-3">
               <div className="text-xs text-slate-500 mb-1 font-medium">AI Analysis</div>
-              <p className="text-sm text-slate-300">{alert.llm_explanation}</p>
+              <p className="text-sm text-slate-300">{row.llm_explanation}</p>
             </div>
           )}
 
-          {alert.degraded && (
+          {row.degraded && (
             <div className="mb-3 text-xs text-amber-400">
               LLM unavailable — deterministic triage only
             </div>
           )}
 
-          <div className="flex gap-2 mt-3">
-            <button
-              onClick={() => onDispose("true_positive")}
-              disabled={disposing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
-            >
-              <XCircle size={14} /> Confirm
-            </button>
-            <button
-              onClick={() => onDispose("acknowledged")}
-              disabled={disposing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 transition-colors disabled:opacity-50"
-            >
-              <CheckCircle size={14} /> Acknowledge
-            </button>
-            <button
-              onClick={() => onDispose("undetermined")}
-              disabled={disposing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
-            >
-              <ArrowUpCircle size={14} /> Escalate
-            </button>
-          </div>
+          {selectable ? (
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => onDispose("true_positive")}
+                disabled={disposing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+              >
+                <XCircle size={14} /> Confirm
+              </button>
+              <button
+                onClick={() => onDispose("acknowledged")}
+                disabled={disposing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 transition-colors disabled:opacity-50"
+              >
+                <CheckCircle size={14} /> Acknowledge
+              </button>
+              <button
+                onClick={() => onDispose("undetermined")}
+                disabled={disposing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+              >
+                <ArrowUpCircle size={14} /> Escalate
+              </button>
+            </div>
+          ) : (
+            <div className="text-xs text-slate-500">
+              Dispositioned {timeAgo(row.created_at)}
+            </div>
+          )}
         </div>
       )}
     </div>

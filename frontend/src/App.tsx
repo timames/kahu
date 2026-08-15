@@ -6,6 +6,7 @@ import { Feed } from "@/pages/Feed";
 import { Investigate } from "@/pages/Investigate";
 import { Reports } from "@/pages/Reports";
 import { Compliance } from "@/pages/Compliance";
+import { GRC } from "@/pages/GRC";
 import { Connectors } from "@/pages/Connectors";
 import { Recon } from "@/pages/Recon";
 import { Arsenal } from "@/pages/Arsenal";
@@ -36,6 +37,7 @@ export function App() {
         <Route path="investigate" element={<Investigate />} />
         <Route path="reports" element={<Reports />} />
         <Route path="compliance" element={<Compliance />} />
+        <Route path="grc" element={<GRC />} />
         <Route path="connectors" element={<Connectors />} />
         <Route path="recon" element={<Recon />} />
         <Route path="arsenal" element={<Arsenal />} />

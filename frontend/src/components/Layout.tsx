@@ -1,10 +1,12 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   ListFilter,
   MessageSquare,
   FileText,
   ShieldCheck,
+  ClipboardCheck,
   Cable,
   Radar,
   Swords,
@@ -14,6 +16,7 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
+import { getProfiles } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 
@@ -31,6 +34,11 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/reports", icon: FileText, label: "Reports" },
   { to: "/compliance", icon: ShieldCheck, label: "Compliance" },
   { to: "/connectors", icon: Cable, label: "Connectors" },
+];
+
+const GRC_ITEM: NavItem = { to: "/grc", icon: ClipboardCheck, label: "GRC" };
+
+const REST_ITEMS: NavItem[] = [
   { to: "/recon", icon: Radar, label: "Recon" },
   { to: "/arsenal", icon: Swords, label: "Arsenal" },
 ];
@@ -41,7 +49,15 @@ export function Layout() {
   const { username, logout } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
 
-  const items = [...NAV_ITEMS, SETTINGS_ITEM];
+  const { data: profiles } = useQuery({ queryKey: ["profiles"], queryFn: getProfiles });
+  const hasProfiles = (profiles?.length ?? 0) > 0;
+
+  const items = [
+    ...NAV_ITEMS,
+    ...(hasProfiles ? [GRC_ITEM] : []),
+    ...REST_ITEMS,
+    SETTINGS_ITEM,
+  ];
 
   return (
     <div className="flex h-full">

@@ -61,11 +61,21 @@ export const getBriefing = () =>
 export const getGlance = () => request<GlanceData>("/m/glance");
 
 // ── Triage ──
-export const getQueue = (limit = 50) =>
-  request<{ alerts: Alert[]; total: number }>(`/triage/queue?limit=${limit}`);
+export const getQueue = (limit = 50, severity?: string) => {
+  const p = new URLSearchParams({ limit: String(limit) });
+  if (severity) p.set("severity", severity);
+  return request<{ alerts: Alert[]; total: number }>(`/triage/queue?${p}`);
+};
 
-export const getHistory = (limit = 50) =>
-  request<{ alerts: Alert[]; total: number }>(`/triage/history?limit=${limit}`);
+export const getHistory = (
+  opts: { limit?: number; severity?: string; verdict?: string; search?: string } = {},
+) => {
+  const p = new URLSearchParams({ limit: String(opts.limit ?? 50) });
+  if (opts.severity) p.set("severity", opts.severity);
+  if (opts.verdict) p.set("verdict", opts.verdict);
+  if (opts.search) p.set("search", opts.search);
+  return request<{ alerts: HistoryAlert[]; total: number }>(`/triage/history?${p}`);
+};
 
 export const disposeAlert = (alertId: string, verdict: string, notes = "") =>
   request(`/triage/alerts/${alertId}/disposition`, {
@@ -113,7 +123,24 @@ export const getFrameworks = () =>
 export const getProfiles = () =>
   request<{ profiles: Profile[] }>("/compliance/profiles").then((r) => r.profiles);
 export const getCoverage = (frameworkId: string) =>
-  request<CoverageData>(`/compliance/frameworks/${frameworkId}/coverage`);
+  request<CoverageMatrix>(`/compliance/frameworks/${frameworkId}/coverage`);
+export const getGaps = (frameworkId: string) =>
+  request<GapAnalysis>(`/compliance/frameworks/${frameworkId}/gaps`);
+export const activateProfile = (
+  frameworkId: string,
+  organizationName = "My Organization",
+  scope = "All systems",
+) =>
+  request<Profile>("/compliance/profiles", {
+    method: "POST",
+    body: JSON.stringify({
+      framework_id: frameworkId,
+      organization_name: organizationName,
+      scope,
+    }),
+  });
+export const deactivateProfile = (frameworkId: string) =>
+  request(`/compliance/profiles/${frameworkId}`, { method: "DELETE" });
 
 // ── Connectors ──
 export const getConnectorCatalog = () =>
@@ -195,6 +222,20 @@ export interface Alert {
   has_disposition: boolean;
   llm_explanation: string | null;
   degraded: boolean;
+}
+
+export interface HistoryAlert {
+  id: string;
+  wazuh_alert_id: string;
+  rule_id: string;
+  rule_description: string;
+  severity: string;
+  agent_name: string | null;
+  created_at: string;
+  verdict: string | null;
+  analyst: string | null;
+  disposition_at: string | null;
+  llm_explanation: string | null;
 }
 
 export interface GlanceData {
@@ -284,18 +325,60 @@ export interface Framework {
   name: string;
   description: string;
   version: string;
-  families: Record<string, unknown>;
+  control_count: number;
 }
 
 export interface Profile {
-  id: string;
   framework_id: string;
-  activated_at: string;
+  framework_name: string;
+  organization_name: string;
+  scope: string;
+  status: string;
+  control_count: number;
+  created_at: string;
 }
 
-export interface CoverageData {
-  framework: string;
-  coverage: Record<string, unknown>;
+export interface ControlCoverage {
+  id: string;
+  title: string;
+  covered: boolean;
+  coverage_source: string | null;
+  evidence_type: string | null;
+  gap: boolean;
+  evidence_count: number;
+  stale: boolean;
+}
+
+export interface FamilyCoverage {
+  family_id: string;
+  family_name: string;
+  controls: ControlCoverage[];
+  coverage_pct: number;
+}
+
+export interface CoverageMatrix {
+  framework_id: string;
+  framework_name: string;
+  total_controls: number;
+  covered_controls: number;
+  coverage_pct: number;
+  families: FamilyCoverage[];
+}
+
+export interface ComplianceGap {
+  control_id: string;
+  title: string;
+  family: string;
+  priority: string;
+  recommendation: string;
+}
+
+export interface GapAnalysis {
+  framework_id: string;
+  framework_name: string;
+  total_gaps: number;
+  gaps: ComplianceGap[];
+  quick_wins: ComplianceGap[];
 }
 
 export interface ConnectorField {
