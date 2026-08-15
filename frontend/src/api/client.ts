@@ -57,6 +57,9 @@ export const getHealth = () => request<{ status: string }>("/health");
 export const getBriefing = () =>
   request<{ briefing: string; context: Record<string, number>; degraded: boolean }>("/briefing");
 
+// ── Glance ──
+export const getGlance = () => request<GlanceData>("/m/glance");
+
 // ── Triage ──
 export const getQueue = (limit = 50) =>
   request<{ alerts: Alert[]; total: number }>(`/triage/queue?limit=${limit}`);
@@ -192,6 +195,14 @@ export interface Alert {
   has_disposition: boolean;
   llm_explanation: string | null;
   degraded: boolean;
+}
+
+export interface GlanceData {
+  color: string;
+  count: number;
+  headline: string;
+  breakdown: { critical: number; high: number; medium: number; low: number; info: number };
+  last_updated: string;
 }
 
 export interface TriageStatus {
