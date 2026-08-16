@@ -35,7 +35,7 @@ class OllamaClient:
         system: str = "",
         num_predict: int = _DEFAULT_NUM_PREDICT,
         options: dict | None = None,
-        response_format: str | None = None,
+        response_format: str | dict | None = None,
     ) -> str:
         # num_predict is the one option every caller sets; anything else
         # (temperature, repeat_penalty, ...) is merged in per-call so structured
@@ -52,9 +52,12 @@ class OllamaClient:
             "keep_alive": _KEEP_ALIVE,
             "options": opts,
         }
-        # `format` is a top-level Ollama field, not an option. "json" grammar-
-        # constrains the decode to syntactically valid JSON, so callers that need
-        # a parseable object don't depend on the model's instruction-following.
+        # `format` is a top-level Ollama field, not an option. Either the string
+        # "json" (any valid JSON) or a JSON-schema dict (grammar constrained to
+        # that exact shape) — the schema form additionally closes the object once
+        # its required fields are emitted, which stops run-on strings. Either way
+        # the caller gets a parseable object without depending on the model's
+        # instruction-following.
         if response_format is not None:
             payload["format"] = response_format
         async with httpx.AsyncClient(timeout=_GENERATE_TIMEOUT) as client:
@@ -87,8 +90,7 @@ class OllamaClient:
                 resp.raise_for_status()
                 running = resp.json().get("models", [])
                 return any(
-                    m.get("model") == self.model or m.get("name") == self.model
-                    for m in running
+                    m.get("model") == self.model or m.get("name") == self.model for m in running
                 )
         except httpx.HTTPError:
             return False

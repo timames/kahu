@@ -11,7 +11,9 @@
 # authentication, so restrict this port to the core node at the firewall.
 services:
   ollama:
-    image: ollama/ollama:latest
+    # Pinned, not :latest — see docker-compose.yml for why. GPU hosts override
+    # with the matching -rocm/-cuda tag of the same version.
+    image: ollama/ollama:0.32.13
     restart: unless-stopped
     ports:
       - "${OLLAMA_BIND:-0.0.0.0}:11434:11434"

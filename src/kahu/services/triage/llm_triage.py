@@ -72,16 +72,57 @@ Respond with ONLY a single JSON object. Field rules:
 - "recommended_actions": an array of strings with concrete next steps
 - "confidence": a number from 0.0 to 1.0
 
-Example of a well-formed response (match this shape exactly, with your own values):
+Required shape — replace every value below with your own assessment of the alert above:
 {{
-  "severity": "medium",
-  "recommended_verdict": "acknowledged",
-  "explanation": "A failed SSH login from a single source IP; routine noise for this host.",
-  "benign_explanations": ["User mistyped their password", "Automated scanner probing the port"],
-  "recommended_actions": ["Confirm the source IP is not on a watchlist", "No action if routine"],
-  "confidence": 0.7
+  "severity": "<one of: critical, high, medium, low, info>",
+  "recommended_verdict": "<one of: true_positive, acknowledged, escalate>",
+  "explanation": "<one to three sentences on what THIS alert indicates and why it matters>",
+  "benign_explanations": ["<a plausible innocent cause, if any>"],
+  "recommended_actions": ["<a concrete next step>"],
+  "confidence": 0.5
 }}
 """
+# The shape above uses PLACEHOLDER values, deliberately. An earlier version gave a
+# fully-worked SSH-login example; at temperature 0.2 the model copied that example's
+# "explanation" verbatim onto every alert (Windows events came out described as
+# "A failed SSH login from a single source IP") — an explicit "do not copy the
+# example" instruction did NOT stop it. The JSON schema (TRIAGE_RESPONSE_SCHEMA)
+# now guarantees the format, so the example only needs to convey the *fields*, not
+# demonstrate prose. Placeholder angle-bracket values can't be mistaken for a real
+# assessment if echoed, and in practice the model fills them from the alert.
+
+
+# A JSON *schema* (not the bare format="json" flag) for the triage response.
+# Passing the schema as Ollama's `format` builds a grammar that constrains the
+# decode field-by-field: severity/verdict are locked to their enums and, crucially,
+# the object is closed as soon as the required fields are present. Bare
+# format="json" left the model free to run the "explanation" string on for
+# thousands of tokens until num_predict truncated it mid-string — an
+# Unterminated-string parse-fail that degraded ~half of the harder alerts.
+# Enum-constraining severity here is defence-in-depth only: the governing severity
+# floor still reads the deterministic FilterResult.severity, never this value.
+TRIAGE_RESPONSE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "info"]},
+        "recommended_verdict": {
+            "type": "string",
+            "enum": ["true_positive", "acknowledged", "escalate"],
+        },
+        "explanation": {"type": "string"},
+        "benign_explanations": {"type": "array", "items": {"type": "string"}},
+        "recommended_actions": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "number"},
+    },
+    "required": [
+        "severity",
+        "recommended_verdict",
+        "explanation",
+        "benign_explanations",
+        "recommended_actions",
+        "confidence",
+    ],
+}
 
 
 # The canonical verdict vocabulary is DispositionVerdict's (models/alerts.py) —
@@ -138,17 +179,19 @@ async def run_llm_triage(
     user_prompt = USER_PROMPT_TEMPLATE.format(alert_data=prompt_data)
 
     try:
-        # Triage output must be a small, well-formed JSON object. `format="json"`
-        # grammar-constrains the decode so we get syntactically valid JSON even
-        # when the 7B model would otherwise drift into prose or a degeneration
-        # loop. Low temperature keeps it on-schema; a heavy repeat penalty is
+        # Triage output must be a small, well-formed JSON object. Passing the
+        # response *schema* (not the bare "json" flag) grammar-constrains the
+        # decode to our exact shape and closes the object once the required
+        # fields are present, so the model can't drift into prose or a run-on
+        # "explanation" string that num_predict then truncates mid-value. Low
+        # temperature keeps it on-schema; a heavy repeat penalty is
         # counter-productive here (JSON is intentionally repetitive — braces,
         # quotes, keys — so penalising repeats pushes the model off valid JSON).
         raw_response = await client.generate(
             prompt=user_prompt,
             system=SYSTEM_PROMPT,
             options={"temperature": 0.2, "top_p": 0.9},
-            response_format="json",
+            response_format=TRIAGE_RESPONSE_SCHEMA,
         )
         return _parse_llm_response(raw_response)
 
