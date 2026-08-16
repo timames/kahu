@@ -30,8 +30,19 @@ class OllamaClient:
         self.model = settings.ollama_model
 
     async def generate(
-        self, prompt: str, system: str = "", num_predict: int = _DEFAULT_NUM_PREDICT
+        self,
+        prompt: str,
+        system: str = "",
+        num_predict: int = _DEFAULT_NUM_PREDICT,
+        options: dict | None = None,
     ) -> str:
+        # num_predict is the one option every caller sets; anything else
+        # (temperature, repeat_penalty, ...) is merged in per-call so structured
+        # callers can request anti-degeneration sampling without changing the
+        # server defaults for everyone.
+        opts = {"num_predict": num_predict}
+        if options:
+            opts.update(options)
         async with httpx.AsyncClient(timeout=_GENERATE_TIMEOUT) as client:
             response = await client.post(
                 f"{self.base_url}/api/generate",
@@ -41,7 +52,7 @@ class OllamaClient:
                     "system": system,
                     "stream": False,
                     "keep_alive": _KEEP_ALIVE,
-                    "options": {"num_predict": num_predict},
+                    "options": opts,
                 },
             )
             response.raise_for_status()

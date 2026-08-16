@@ -159,12 +159,17 @@ class TestResponseParsing:
         result = _parse_llm_response("not json at all")
         assert result["severity"] is None
         assert result.get("parse_error") is True
-        assert "not json at all" in result["explanation"]
+        # Unparseable output is treated as no model signal, not surfaced raw:
+        # the pipeline gates on `degraded`, and the raw text must never reach
+        # the UI (it may be a degeneration loop or attacker-controlled content).
+        assert result.get("degraded") is True
+        assert "not json at all" not in result["explanation"]
 
     def test_handles_empty_response(self):
         result = _parse_llm_response("")
         assert result["severity"] is None
         assert result.get("parse_error") is True
+        assert result.get("degraded") is True
 
 
 class TestVerdictCanonicalisation:

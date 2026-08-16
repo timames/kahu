@@ -130,9 +130,14 @@ async def run_llm_triage(
     user_prompt = USER_PROMPT_TEMPLATE.format(alert_data=prompt_data)
 
     try:
+        # Triage output must be a small, well-formed JSON object. Low temperature
+        # keeps the model on-schema, and a firmer repeat penalty guards against the
+        # degeneration loops that otherwise run to the num_predict cap emitting
+        # unparseable repeated tokens (observed in prod on rule 81600).
         raw_response = await client.generate(
             prompt=user_prompt,
             system=SYSTEM_PROMPT,
+            options={"temperature": 0.2, "top_p": 0.9, "repeat_penalty": 1.3},
         )
         return _parse_llm_response(raw_response)
 
@@ -289,13 +294,20 @@ def _parse_llm_response(raw: str) -> dict:
         return result
     except (json.JSONDecodeError, Exception) as e:
         logger.warning("Failed to parse LLM response as JSON: %s", e)
-        # Return what we can — the explanation is still useful as free text
+        # No usable structured output. This is most often a repetition/degeneration
+        # loop or a truncated fragment — not readable prose. Never surface the raw
+        # text: it is unreadable in the UI and, being derived from
+        # attacker-controllable log content (<ALERT_DATA>), must not be shown
+        # unvalidated. Treat it exactly like an offline model — degraded, no
+        # signal — so downstream (auto_disposition, feed) refuses to act on it and
+        # the UI shows the clean degraded state instead of garbage.
         return {
             "severity": None,
-            "explanation": raw[:2000] if raw else "",
+            "explanation": "AI triage produced unreadable output — deterministic assessment only.",
             "benign_explanations": [],
-            "recommended_actions": [],
+            "recommended_actions": ["Review alert manually — AI triage output was unparseable."],
             "confidence": 0.0,
+            "degraded": True,
             "parse_error": True,
         }
 
