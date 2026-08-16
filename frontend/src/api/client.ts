@@ -294,9 +294,10 @@ export interface GlanceData {
 export interface TriageStatus {
   pipeline_running: boolean;
   ollama_healthy: boolean;
-  total_processed: number;
-  queue_depth: number;
-  degraded: boolean;
+  ollama_model_loaded: boolean;
+  wazuh_api_healthy: boolean;
+  wazuh_indexer_healthy: boolean;
+  pipeline_degraded: boolean;
 }
 
 export interface SwipeCard {

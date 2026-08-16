@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,13 +9,31 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from kahu.api import router as api_router
+from kahu.clients.ollama import OllamaClient
 from kahu.config import settings
 from kahu.db import engine
 from kahu.services.pono import run_pono_loop
 from kahu.services.triage.poller import run_poller
 from kahu.services.triage.reeval import start_reeval_loop, stop_reeval_loop
 
+logger = logging.getLogger(__name__)
+
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+async def _preload_ollama() -> None:
+    """Warm the LLM into memory at startup so the first triage isn't slow.
+
+    Best-effort: a cold load can take ~60-100s and Ollama may not be up yet, so
+    failure here just means the model loads lazily on the first real request.
+    """
+    try:
+        if await OllamaClient().preload():
+            logger.info("Ollama model preloaded and pinned")
+        else:
+            logger.warning("Ollama preload failed — model will load on first triage")
+    except Exception:
+        logger.exception("Ollama preload raised")
 
 
 @asynccontextmanager
@@ -28,11 +47,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Startup — launch background tasks
     poller_task = asyncio.create_task(run_poller(interval=15.0))
     pono_task = asyncio.create_task(run_pono_loop(interval=300.0))
+    # Fire-and-forget model warm-up; kept referenced so it isn't GC'd mid-flight.
+    preload_task = asyncio.create_task(_preload_ollama())
     await start_reeval_loop()
     yield
     # Shutdown
     poller_task.cancel()
     pono_task.cancel()
+    preload_task.cancel()
     await stop_reeval_loop()
     await engine.dispose()
 

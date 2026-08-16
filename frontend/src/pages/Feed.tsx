@@ -6,6 +6,7 @@ import {
   getWazuhLogs,
   getLogStorage,
   getSwipeFeed,
+  getTriageStatus,
   disposeAlert,
   swipeAlert,
   type SwipeCard,
@@ -22,6 +23,7 @@ import {
   CreditCard,
   Search,
   HardDrive,
+  AlertTriangle,
 } from "lucide-react";
 
 const SEV_RANK: Record<string, number> = {
@@ -63,6 +65,36 @@ interface Row {
   level?: number;
 }
 
+/** Warns operators when new alerts are being triaged deterministically because
+ *  the local model is unreachable or not resident in memory. */
+function DegradedBanner() {
+  const { data: status } = useQuery({
+    queryKey: ["triage-status"],
+    queryFn: getTriageStatus,
+    refetchInterval: 15_000,
+  });
+
+  if (!status || !status.pipeline_degraded) return null;
+
+  const reason = !status.ollama_healthy
+    ? "The local model service is unreachable."
+    : "The local model is not loaded (warming up or evicted from memory).";
+
+  return (
+    <div className="mb-4 flex items-start gap-2 p-3 rounded-xl border border-amber-500/40 bg-amber-500/10">
+      <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-400" />
+      <div>
+        <p className="text-sm font-medium text-amber-300">
+          AI triage unavailable — deterministic assessment only
+        </p>
+        <p className="mt-0.5 text-xs text-amber-400/80">
+          {reason} New alerts get rule-based triage until it returns.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function Feed() {
   const [swipeMode, setSwipeMode] = useState(false);
 
@@ -82,6 +114,8 @@ export function Feed() {
           {swipeMode ? "List View" : "Swipe Mode"}
         </button>
       </div>
+
+      <DegradedBanner />
 
       {swipeMode ? <SwipeFeed /> : <ListFeed />}
     </div>

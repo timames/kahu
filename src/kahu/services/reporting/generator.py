@@ -182,7 +182,9 @@ async def _generate_or_fallback(prompt: str, system: str, fallback: str) -> dict
     try:
         if not await ollama.health():
             raise RuntimeError("Ollama offline")
-        text = await ollama.generate(prompt=prompt, system=system)
+        # Reports are narrative prose; give them a larger budget than the
+        # triage-sized default so multi-paragraph output isn't truncated.
+        text = await ollama.generate(prompt=prompt, system=system, num_predict=4096)
         return {"text": text.strip(), "degraded": False}
     except Exception:
         return {"text": fallback, "degraded": True}

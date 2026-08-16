@@ -387,6 +387,9 @@ async def pipeline_status() -> PipelineStatusResponse:
     indexer = WazuhIndexerClient()
 
     ollama_ok = await ollama.health()
+    # Reachability alone isn't enough — the API answers with no model resident.
+    # Degradation is driven by whether the model is actually loaded.
+    model_loaded = await ollama.model_loaded() if ollama_ok else False
 
     try:
         await wazuh_api.authenticate()
@@ -405,9 +408,10 @@ async def pipeline_status() -> PipelineStatusResponse:
     return PipelineStatusResponse(
         pipeline_running=poller_running(),
         ollama_healthy=ollama_ok,
+        ollama_model_loaded=model_loaded,
         wazuh_api_healthy=wazuh_api_ok,
         wazuh_indexer_healthy=indexer_ok,
-        pipeline_degraded=not ollama_ok,
+        pipeline_degraded=not (ollama_ok and model_loaded),
     )
 
 

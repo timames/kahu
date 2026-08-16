@@ -68,12 +68,24 @@ export function Glance() {
         <StatCard
           icon={<Shield size={18} />}
           label="AI Model"
-          value={status?.ollama_healthy ? "Online" : "Offline"}
-          valueClass={status?.ollama_healthy ? "text-green-400" : "text-red-400"}
+          value={
+            !status?.ollama_healthy
+              ? "Offline"
+              : status?.ollama_model_loaded
+                ? "Online"
+                : "Not loaded"
+          }
+          valueClass={
+            status?.ollama_healthy && status?.ollama_model_loaded
+              ? "text-green-400"
+              : status?.ollama_healthy
+                ? "text-amber-400"
+                : "text-red-400"
+          }
         />
       </div>
 
-      {status?.degraded && (
+      {status?.pipeline_degraded && (
         <div className="flex items-center gap-2 text-amber-400 text-sm bg-amber-400/10 px-4 py-2 rounded-lg">
           <AlertTriangle size={16} />
           AI triage degraded — running deterministic-only mode
