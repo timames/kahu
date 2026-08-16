@@ -282,7 +282,15 @@ def _parse_llm_response(raw: str) -> dict:
         text = "\n".join(lines)
 
     try:
-        parsed = json.loads(text)
+        # Models frequently emit a valid JSON object followed by trailing tokens
+        # (extra prose, a second object, or a repetition tail) — a plain
+        # json.loads then fails on the "Extra data" and we needlessly degrade an
+        # otherwise good triage. Decode just the first well-formed object with
+        # raw_decode, skipping any leading prose up to the first opening brace.
+        start = text.find("{")
+        if start == -1:
+            raise json.JSONDecodeError("no JSON object in response", text, 0)
+        parsed, _ = json.JSONDecoder().raw_decode(text, start)
         output = LLMTriageOutput(**parsed)
         result = output.model_dump()
         # Validate severity is in allowed set

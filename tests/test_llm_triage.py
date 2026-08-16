@@ -155,6 +155,30 @@ class TestResponseParsing:
         result = _parse_llm_response(response)
         assert result["severity"] is None
 
+    def test_recovers_json_with_trailing_data(self):
+        # Models often emit a valid object then keep talking (or loop). Take the
+        # leading object instead of degrading the whole result.
+        response = (
+            '{"severity": "high", "explanation": "Brute force",'
+            ' "benign_explanations": [], "recommended_actions": [],'
+            ' "confidence": 0.7}\nHere is some extra commentary the model added.'
+        )
+        result = _parse_llm_response(response)
+        assert result["severity"] == "high"
+        assert result.get("parse_error") is not True
+        assert result["confidence"] == 0.7
+
+    def test_recovers_json_after_leading_prose(self):
+        response = (
+            'Sure, here is my assessment:\n'
+            '{"severity": "medium", "explanation": "test",'
+            ' "benign_explanations": [], "recommended_actions": [],'
+            ' "confidence": 0.5}'
+        )
+        result = _parse_llm_response(response)
+        assert result["severity"] == "medium"
+        assert result.get("parse_error") is not True
+
     def test_handles_malformed_json(self):
         result = _parse_llm_response("not json at all")
         assert result["severity"] is None
