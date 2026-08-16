@@ -30,7 +30,7 @@ the JVM loses compressed object pointers). A 128 GB box gets a 31 GB heap.
 Non-interactive:
 
 ```bash
-sudo ./deploy/install.sh --yes --gpu off --model mistral:7b-instruct-v0.3-q4_K_M
+sudo ./deploy/install.sh --yes --gpu off --model qwen2.5:14b-instruct
 ```
 
 ### GPU

@@ -50,7 +50,7 @@ async def run_batch(
     fleet_prior: FleetPrior | None = None,
     risk_context: dict[tuple[str, str, str], dict] | None = None,
     ollama_url: str = "http://localhost:11434",
-    ollama_model: str = "mistral:7b-instruct-v0.3-q4_K_M",
+    ollama_model: str = "qwen2.5:14b-instruct",
     today: Any = None,
 ) -> BatchResult:
     """Run the full nightly batch.

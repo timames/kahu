@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # Ollama
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "mistral:7b-instruct-v0.3-q4_K_M"
+    ollama_model: str = "qwen2.5:14b-instruct"
 
     # Wazuh
     wazuh_api_url: str = "https://localhost:55000"

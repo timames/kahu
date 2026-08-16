@@ -52,7 +52,7 @@ CORE_HOST=""
 SIEM_HOST=""
 AI_HOST=""
 SCANNER_HOST=""
-OLLAMA_MODEL="mistral:7b-instruct-v0.3-q4_K_M"
+OLLAMA_MODEL="qwen2.5:14b-instruct"
 GPU_MODE="auto"            # auto | force | off
 ASSUME_YES=0
 SKIP_DOCKER=0
@@ -73,7 +73,7 @@ Options:
   --ai-host HOST              Address of the ai node (core role)
   --scanner-host HOST         Address of the scanner node (core role; optional)
   --join BUNDLE.tar.gz        Join bundle emitted by the core node
-  --model NAME                Ollama model (default: mistral:7b-instruct-v0.3-q4_K_M)
+  --model NAME                Ollama model (default: qwen2.5:14b-instruct)
   --gpu auto|force|off        NVIDIA GPU for Ollama (default: auto-detect)
   --yes, -y                   Non-interactive; accept defaults
   --skip-docker               Do not install Docker

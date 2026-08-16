@@ -13,7 +13,7 @@ import httpx
 async def narrate_proposal(
     evidence: dict,
     ollama_url: str = "http://localhost:11434",
-    model: str = "mistral:7b-instruct-v0.3-q4_K_M",
+    model: str = "qwen2.5:14b-instruct",
 ) -> str | None:
     """Generate a two-sentence human summary of a proposal's evidence.
 

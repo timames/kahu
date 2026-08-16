@@ -509,7 +509,7 @@ Thin async wrapper around the Ollama REST API.
 - `generate(prompt, system)` — POST `/api/generate` with configured model name, stream=False, 120s timeout
 - `health()` — GET `/api/tags` with 5s timeout, returns boolean
 - Model-agnostic: model name comes from `settings.ollama_model`
-- Default model: `mistral:7b-instruct-v0.3-q4_K_M` (configurable)
+- Default model: `qwen2.5:14b-instruct` (configurable)
 
 ### 8.2 Wazuh Clients (`clients/wazuh.py`)
 

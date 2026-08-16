@@ -132,7 +132,7 @@ All settings via environment variables or `.env` file. See `.env.example`.
 | `DATABASE_URL` | — | Postgres connection string (asyncpg) |
 | `REDIS_URL` | — | Redis connection string |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API endpoint |
-| `OLLAMA_MODEL` | `mistral:7b-instruct-v0.3-q4_K_M` | Model for triage |
+| `OLLAMA_MODEL` | `qwen2.5:14b-instruct` | Model for triage |
 | `WAZUH_API_URL` | `https://localhost:55000` | Wazuh management API |
 | `SECRET_KEY` | — | JWT signing key |
 
