@@ -35,6 +35,7 @@ class OllamaClient:
         system: str = "",
         num_predict: int = _DEFAULT_NUM_PREDICT,
         options: dict | None = None,
+        response_format: str | None = None,
     ) -> str:
         # num_predict is the one option every caller sets; anything else
         # (temperature, repeat_penalty, ...) is merged in per-call so structured
@@ -43,17 +44,23 @@ class OllamaClient:
         opts = {"num_predict": num_predict}
         if options:
             opts.update(options)
+        payload: dict = {
+            "model": self.model,
+            "prompt": prompt,
+            "system": system,
+            "stream": False,
+            "keep_alive": _KEEP_ALIVE,
+            "options": opts,
+        }
+        # `format` is a top-level Ollama field, not an option. "json" grammar-
+        # constrains the decode to syntactically valid JSON, so callers that need
+        # a parseable object don't depend on the model's instruction-following.
+        if response_format is not None:
+            payload["format"] = response_format
         async with httpx.AsyncClient(timeout=_GENERATE_TIMEOUT) as client:
             response = await client.post(
                 f"{self.base_url}/api/generate",
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "system": system,
-                    "stream": False,
-                    "keep_alive": _KEEP_ALIVE,
-                    "options": opts,
-                },
+                json=payload,
             )
             response.raise_for_status()
             return response.json()["response"]

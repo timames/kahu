@@ -64,14 +64,22 @@ Analyze this security alert and provide a structured triage assessment.
 {alert_data}
 </ALERT_DATA>
 
-Respond with ONLY valid JSON in this exact format:
+Respond with ONLY a single JSON object. Field rules:
+- "severity": exactly one of "critical", "high", "medium", "low", "info"
+- "recommended_verdict": exactly one of "true_positive", "acknowledged", "escalate"
+- "explanation": a plain-English string describing what happened and why it matters
+- "benign_explanations": an array of strings (use [] if none)
+- "recommended_actions": an array of strings with concrete next steps
+- "confidence": a number from 0.0 to 1.0
+
+Example of a well-formed response (match this shape exactly, with your own values):
 {{
-  "severity": "critical|high|medium|low|info",
-  "recommended_verdict": "true_positive|acknowledged|escalate",
-  "explanation": "Plain-English explanation of what happened and why it matters",
-  "benign_explanations": ["List of probable benign explanations if any"],
-  "recommended_actions": ["Specific next steps for the analyst"],
-  "confidence": 0.0 to 1.0
+  "severity": "medium",
+  "recommended_verdict": "acknowledged",
+  "explanation": "A failed SSH login from a single source IP; routine noise for this host.",
+  "benign_explanations": ["User mistyped their password", "Automated scanner probing the port"],
+  "recommended_actions": ["Confirm the source IP is not on a watchlist", "No action if routine"],
+  "confidence": 0.7
 }}
 """
 
@@ -130,14 +138,17 @@ async def run_llm_triage(
     user_prompt = USER_PROMPT_TEMPLATE.format(alert_data=prompt_data)
 
     try:
-        # Triage output must be a small, well-formed JSON object. Low temperature
-        # keeps the model on-schema, and a firmer repeat penalty guards against the
-        # degeneration loops that otherwise run to the num_predict cap emitting
-        # unparseable repeated tokens (observed in prod on rule 81600).
+        # Triage output must be a small, well-formed JSON object. `format="json"`
+        # grammar-constrains the decode so we get syntactically valid JSON even
+        # when the 7B model would otherwise drift into prose or a degeneration
+        # loop. Low temperature keeps it on-schema; a heavy repeat penalty is
+        # counter-productive here (JSON is intentionally repetitive — braces,
+        # quotes, keys — so penalising repeats pushes the model off valid JSON).
         raw_response = await client.generate(
             prompt=user_prompt,
             system=SYSTEM_PROMPT,
-            options={"temperature": 0.2, "top_p": 0.9, "repeat_penalty": 1.3},
+            options={"temperature": 0.2, "top_p": 0.9},
+            response_format="json",
         )
         return _parse_llm_response(raw_response)
 
@@ -290,7 +301,10 @@ def _parse_llm_response(raw: str) -> dict:
         start = text.find("{")
         if start == -1:
             raise json.JSONDecodeError("no JSON object in response", text, 0)
-        parsed, _ = json.JSONDecoder().raw_decode(text, start)
+        # strict=False tolerates raw control characters (e.g. an unescaped
+        # newline) inside strings, which the model — even under format="json" —
+        # sometimes emits and which strict json.loads rejects.
+        parsed, _ = json.JSONDecoder(strict=False).raw_decode(text, start)
         output = LLMTriageOutput(**parsed)
         result = output.model_dump()
         # Validate severity is in allowed set
@@ -299,6 +313,12 @@ def _parse_llm_response(raw: str) -> dict:
         # Normalise the verdict to the canonical DispositionVerdict spelling;
         # unrecognised values become None ("no recommendation").
         result["recommended_verdict"] = canonical_verdict(result.get("recommended_verdict"))
+        # Syntactically valid JSON that carries none of our fields (e.g. the
+        # model returned {"name": "password"}) is not a usable assessment. Treat
+        # it as no model signal rather than surfacing a blank AI card, so the UI
+        # shows the clean degraded state and downstream refuses to act on it.
+        if result["severity"] is None and not result["explanation"].strip():
+            return _degraded_result()
         return result
     except (json.JSONDecodeError, Exception) as e:
         logger.warning("Failed to parse LLM response as JSON: %s", e)

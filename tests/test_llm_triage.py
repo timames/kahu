@@ -179,6 +179,14 @@ class TestResponseParsing:
         assert result["severity"] == "medium"
         assert result.get("parse_error") is not True
 
+    def test_valid_json_without_our_fields_is_degraded(self):
+        # Syntactically valid JSON that carries none of our schema fields is not
+        # a usable assessment — treat it as no model signal, not a blank card.
+        result = _parse_llm_response('{"name": "password"}')
+        assert result["severity"] is None
+        assert result.get("degraded") is True
+        assert result.get("explanation")
+
     def test_handles_malformed_json(self):
         result = _parse_llm_response("not json at all")
         assert result["severity"] is None
