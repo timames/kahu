@@ -13,6 +13,7 @@ from sqlalchemy import String, desc, or_, select
 from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from kahu.api.cmmc_l2_catalog import CMMC_L2_FRAMEWORK
 from kahu.db import get_session
 from kahu.models.compliance import ComplianceProfile
 from kahu.models.evidence import EvidenceRecord
@@ -223,74 +224,7 @@ FRAMEWORKS = {
             },
         },
     },
-    "cmmc_l2": {
-        "name": "CMMC Level 2",
-        "description": (
-            "Cybersecurity Maturity Model Certification"
-            " — Advanced (aligns with NIST 800-171)"
-        ),
-        "version": "2.0",
-        "families": {
-            "AC": {
-                "name": "Access Control",
-                "controls": [
-                    {
-                        "id": "AC.L2-3.1.1",
-                        "title": "Authorized Access Control",
-                        "tags": ["access_control"],
-                    },
-                    {
-                        "id": "AC.L2-3.1.2",
-                        "title": "Transaction & Function Control",
-                        "tags": ["access_control", "authorization"],
-                    },
-                    {"id": "AC.L2-3.1.5", "title": "Least Privilege", "tags": ["least_privilege"]},
-                ],
-            },
-            "AU": {
-                "name": "Audit & Accountability",
-                "controls": [
-                    {"id": "AU.L2-3.3.1", "title": "System Auditing", "tags": ["audit_logging"]},
-                    {
-                        "id": "AU.L2-3.3.2",
-                        "title": "User Accountability",
-                        "tags": ["audit_logging", "attribution"],
-                    },
-                ],
-            },
-            "IR": {
-                "name": "Incident Response",
-                "controls": [
-                    {
-                        "id": "IR.L2-3.6.1",
-                        "title": "Incident Handling",
-                        "tags": ["incident_response", "triage"],
-                    },
-                    {
-                        "id": "IR.L2-3.6.2",
-                        "title": "Incident Reporting",
-                        "tags": ["incident_response", "evidence"],
-                    },
-                ],
-            },
-            "SI": {
-                "name": "System & Information Integrity",
-                "controls": [
-                    {"id": "SI.L2-3.14.1", "title": "Flaw Remediation", "tags": ["patching"]},
-                    {
-                        "id": "SI.L2-3.14.2",
-                        "title": "Malicious Code Protection",
-                        "tags": ["antimalware"],
-                    },
-                    {
-                        "id": "SI.L2-3.14.6",
-                        "title": "Security Alerts & Advisories",
-                        "tags": ["monitoring", "siem"],
-                    },
-                ],
-            },
-        },
-    },
+    "cmmc_l2": CMMC_L2_FRAMEWORK,
     "hipaa": {
         "name": "HIPAA Security Rule",
         "description": "Health Insurance Portability and Accountability Act — Technical Safeguards",
