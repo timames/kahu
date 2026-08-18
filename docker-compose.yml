@@ -43,9 +43,11 @@ services:
     # Pinned, not :latest. The rolling tag silently pulled a build whose KV-cache
     # prefix-reuse corrupted the decode on our constant system-prompt prefix
     # (emitting "?" tokens that crashed the JSON grammar), degrading 100% of
-    # triage. GPU hosts override this with the -rocm/-cuda variant of the same
-    # version. Bump deliberately after verifying triage still parses.
-    image: ollama/ollama:0.32.13
+    # triage. 0.32.13's slot cache also bled one request's context into
+    # another's (briefing text surfaced inside triage explanations); 0.32.14
+    # verified clean. GPU hosts override this with the -rocm/-cuda variant of
+    # the same version. Bump deliberately after verifying triage still parses.
+    image: ollama/ollama:0.32.14
     ports:
       - "11434:11434"
     volumes:
