@@ -11,8 +11,11 @@
 # authentication, so restrict this port to the core node at the firewall.
 services:
   ollama:
-    # Pinned, not :latest — see docker-compose.yml for why. GPU hosts override
-    # with the matching -rocm/-cuda tag of the same version.
+    # Pinned, not :latest — see docker-compose.yml for why. NVIDIA hosts
+    # override with the matching -cuda tag of the same version. AMD iGPU hosts
+    # (Strix Halo) must NOT use -rocm — its backend bleeds KV state across
+    # requests; use this standard image's Vulkan backend instead, with
+    # OLLAMA_IGPU_ENABLE=1 in the environment (see docker-compose.yml).
     image: ollama/ollama:0.32.14
     restart: unless-stopped
     ports:

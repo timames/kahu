@@ -44,9 +44,18 @@ services:
     # prefix-reuse corrupted the decode on our constant system-prompt prefix
     # (emitting "?" tokens that crashed the JSON grammar), degrading 100% of
     # triage. 0.32.13's slot cache also bled one request's context into
-    # another's (briefing text surfaced inside triage explanations); 0.32.14
-    # verified clean. GPU hosts override this with the -rocm/-cuda variant of
-    # the same version. Bump deliberately after verifying triage still parses.
+    # another's (briefing text surfaced inside triage explanations).
+    # Bump deliberately after verifying triage still parses.
+    #
+    # DO NOT use the -rocm variant on AMD iGPUs (Strix Halo / Radeon 8060S):
+    # the ROCm backend corrupts KV state BETWEEN sequential requests — a triage
+    # answer comes back describing the PREVIOUS request's alert (3/3 repro on
+    # 0.32.14-rocm; gfx1151 and gfx1100-override alike; per-request nonces
+    # don't help — slot selection/trimming log correctly, the corruption is
+    # inside the backend). This standard image's Vulkan backend (RADV) on the
+    # same GPU is clean (0/3) and faster (23 vs 15 t/s on qwen2.5:14b). AMD
+    # iGPU hosts need OLLAMA_IGPU_ENABLE=1 in the service environment for GPU
+    # discovery. NVIDIA hosts override with the -cuda variant, same version.
     image: ollama/ollama:0.32.14
     ports:
       - "11434:11434"
