@@ -46,6 +46,21 @@ DISPOSITION HISTORY IS YOUR STRONGEST SIGNAL:
   dismissed as FP in 94 of 100 prior instances").
 - When history is absent, rely on alert content and context alone.
 
+SEVERITY CALIBRATION — RATE THE EVIDENCE, NOT THE WORST CASE:
+- Severity reflects what THIS alert's content actually shows, not what it
+  could hypothetically mean. "Potential security issue" with no named
+  indicator is "low", not "high".
+- Routine operational events — logons/logoffs, service scheduling, process
+  creation by known admin/RMM tooling, application errors, device
+  recognition — are "low" or "info" unless the alert contains a concrete
+  indicator of compromise.
+- Rate "high" or "critical" ONLY when you can name the specific indicator in
+  your explanation: an unexpected binary path, an encoded or obfuscated
+  command line, credential access, a rule with true-positive-heavy history,
+  a critical CVE on the host tied to the observed activity.
+- If you rate above the rule's own level, your explanation MUST cite the
+  indicator that justifies the raise. No indicator, no raise.
+
 SEVERITY FLOOR — HISTORY MAY NOT SILENCE A HIGH/CRITICAL FINDING:
 - If the alert's rule Level is 10 or above (high/critical), disposition history
   and a noisy host may LOWER your confidence but MUST NOT make your verdict
@@ -65,19 +80,19 @@ Analyze this security alert and provide a structured triage assessment.
 </ALERT_DATA>
 
 Respond with ONLY a single JSON object. Field rules:
-- "severity": exactly one of "critical", "high", "medium", "low", "info"
-- "recommended_verdict": exactly one of "true_positive", "acknowledged", "escalate"
 - "explanation": a plain-English string describing what happened and why it matters
 - "benign_explanations": an array of strings (use [] if none)
+- "severity": exactly one of "critical", "high", "medium", "low", "info"
+- "recommended_verdict": exactly one of "true_positive", "acknowledged", "escalate"
 - "recommended_actions": an array of strings with concrete next steps
 - "confidence": a number from 0.0 to 1.0
 
 Required shape — replace every value below with your own assessment of the alert above:
 {{
-  "severity": "<one of: critical, high, medium, low, info>",
-  "recommended_verdict": "<one of: true_positive, acknowledged, escalate>",
   "explanation": "<one to three sentences on what THIS alert indicates and why it matters>",
   "benign_explanations": ["<a plausible innocent cause, if any>"],
+  "severity": "<one of: critical, high, medium, low, info>",
+  "recommended_verdict": "<one of: true_positive, acknowledged, escalate>",
   "recommended_actions": ["<a concrete next step>"],
   "confidence": 0.5
 }}
@@ -101,24 +116,32 @@ Required shape — replace every value below with your own assessment of the ale
 # Unterminated-string parse-fail that degraded ~half of the harder alerts.
 # Enum-constraining severity here is defence-in-depth only: the governing severity
 # floor still reads the deterministic FilterResult.severity, never this value.
+#
+# PROPERTY ORDER IS DELIBERATE — reason first, then decide. The grammar emits
+# fields in the order listed here, so with "severity" first the model had to
+# commit to a rating before generating a single token of analysis; in
+# production it rated ~40-50% of routine Windows noise high/critical with
+# boilerplate justifications. Putting "explanation" and "benign_explanations"
+# ahead of "severity"/"recommended_verdict" makes the decode condition the
+# rating on the model's own stated evidence. Keep "required" in the same order.
 TRIAGE_RESPONSE_SCHEMA: dict = {
     "type": "object",
     "properties": {
+        "explanation": {"type": "string"},
+        "benign_explanations": {"type": "array", "items": {"type": "string"}},
         "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "info"]},
         "recommended_verdict": {
             "type": "string",
             "enum": ["true_positive", "acknowledged", "escalate"],
         },
-        "explanation": {"type": "string"},
-        "benign_explanations": {"type": "array", "items": {"type": "string"}},
         "recommended_actions": {"type": "array", "items": {"type": "string"}},
         "confidence": {"type": "number"},
     },
     "required": [
-        "severity",
-        "recommended_verdict",
         "explanation",
         "benign_explanations",
+        "severity",
+        "recommended_verdict",
         "recommended_actions",
         "confidence",
     ],
