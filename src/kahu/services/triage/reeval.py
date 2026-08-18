@@ -12,7 +12,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import Text, cast, func, or_, select
 
 from kahu.clients.ollama import OllamaClient
 from kahu.db import async_session
@@ -24,8 +24,26 @@ logger = logging.getLogger(__name__)
 
 REEVAL_INTERVAL_SECONDS = 3600  # 1 hour
 REEVAL_BATCH_SIZE = 100
+# When acknowledged alerts have NO llm_triage at all (e.g. rows nulled after a
+# corruption cleanup), waiting a full hour between batches makes the backlog
+# take days to regenerate. While such rows exist, pause only briefly between
+# cycles. This is self-limiting: once every acknowledged alert has triage data
+# again, pending_regen hits 0 and the loop reverts to the hourly cadence.
+REEVAL_BACKLOG_PAUSE_SECONDS = 60
+REEVAL_STARTUP_DELAY_SECONDS = 120  # let Ollama preload before the first cycle
 
 _task: asyncio.Task | None = None
+
+
+def _no_triage():
+    """Expression: alert has no LLM triage stored.
+
+    Matches BOTH SQL NULL (raw ``UPDATE ... SET llm_triage=NULL`` cleanups)
+    and JSON null (the ORM serialises Python None into a JSON column as the
+    JSON literal ``null``, which ``IS NULL`` does not match). Portable across
+    Postgres (jsonb::text -> 'null') and SQLite (stored text 'null').
+    """
+    return or_(Alert.llm_triage.is_(None), cast(Alert.llm_triage, Text) == "null")
 
 
 async def start_reeval_loop():
@@ -49,20 +67,36 @@ async def stop_reeval_loop():
 
 
 async def _reeval_loop():
-    """Run re-evaluation forever on the configured interval."""
+    """Run re-evaluation forever.
+
+    Normally hourly, but while acknowledged alerts with no llm_triage remain
+    (a regeneration backlog) and Ollama is healthy, cycles run back-to-back
+    with only a short pause so the backlog drains in hours, not days.
+    """
+    sleep_seconds = REEVAL_STARTUP_DELAY_SECONDS
     while True:
         try:
-            await asyncio.sleep(REEVAL_INTERVAL_SECONDS)
+            await asyncio.sleep(sleep_seconds)
             stats = await run_reeval_cycle()
             logger.info(
-                "Re-evaluation cycle: %d reviewed, %d promoted back to feed",
+                "Re-evaluation cycle: %d reviewed, %d promoted back to feed, "
+                "%d still awaiting triage regeneration",
                 stats["reviewed"],
                 stats["promoted"],
+                stats["pending_regen"],
             )
+            # Fast-track only when there is an actual regeneration backlog and
+            # the model answered this cycle — never fast-loop against a downed
+            # Ollama or when merely re-checking already-triaged dispositions.
+            if stats["pending_regen"] > 0 and stats["ollama_healthy"]:
+                sleep_seconds = REEVAL_BACKLOG_PAUSE_SECONDS
+            else:
+                sleep_seconds = REEVAL_INTERVAL_SECONDS
         except asyncio.CancelledError:
             break
         except Exception:
             logger.warning("Re-evaluation cycle failed", exc_info=True)
+            sleep_seconds = REEVAL_INTERVAL_SECONDS
 
 
 async def run_reeval_cycle() -> dict:
@@ -96,14 +130,16 @@ async def run_reeval_cycle() -> dict:
                 AlertDisposition.updated_at
                 < datetime.now(UTC) - timedelta(seconds=REEVAL_INTERVAL_SECONDS)
             )
-            .order_by(Alert.created_at.desc())
+            # Alerts whose triage was wiped (regeneration backlog) come first;
+            # within each group, newest alerts first.
+            .order_by(_no_triage().desc(), Alert.created_at.desc())
             .limit(REEVAL_BATCH_SIZE)
         )
         result = await session.execute(stmt)
         rows = result.all()
 
         if not rows:
-            return {"reviewed": 0, "promoted": 0}
+            return {"reviewed": 0, "promoted": 0, "pending_regen": 0, "ollama_healthy": True}
 
         ollama = OllamaClient()
         ollama_healthy = await ollama.health()
@@ -153,4 +189,28 @@ async def run_reeval_cycle() -> dict:
 
         await session.commit()
 
-    return {"reviewed": reviewed, "promoted": promoted}
+        # How many acknowledged alerts still have no triage at all — drives the
+        # loop's fast/slow cadence. Counted after commit so this batch's writes
+        # are reflected.
+        pending_stmt = (
+            select(func.count())
+            .select_from(Alert)
+            .join(AlertDisposition, AlertDisposition.alert_id == Alert.id)
+            .where(
+                AlertDisposition.verdict.in_(
+                    [
+                        DispositionVerdict.ACKNOWLEDGED,
+                        DispositionVerdict.FALSE_POSITIVE,
+                    ]
+                )
+            )
+            .where(_no_triage())
+        )
+        pending_regen = (await session.execute(pending_stmt)).scalar_one()
+
+    return {
+        "reviewed": reviewed,
+        "promoted": promoted,
+        "pending_regen": pending_regen,
+        "ollama_healthy": ollama_healthy,
+    }
