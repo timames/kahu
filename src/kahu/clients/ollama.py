@@ -1,5 +1,7 @@
 """Thin Ollama API client — model-agnostic by design."""
 
+import uuid
+
 import httpx
 
 from kahu.config import settings
@@ -44,6 +46,25 @@ class OllamaClient:
         opts = {"num_predict": num_predict}
         if options:
             opts.update(options)
+        # Defeat Ollama's slot prefix-cache reuse ("selected slot by LCP
+        # similarity" in the server logs). Observed on 0.32.13 AND 0.32.14: when
+        # a new prompt shares a long-enough prefix with the previous request's
+        # cached tokens — which every call sharing a system prompt does — the
+        # server keeps KV state that does not actually match the new prompt, and
+        # under live load one request's context bleeds into another's decode.
+        # Symptoms seen in production: triage explanations describing the login
+        # briefing ("successful SSL login for user nwong"), or a different
+        # host's alert entirely. Ollama exposes no supported way to disable the
+        # reuse, so make the very first tokens of every request unique: the
+        # nonce drives LCP similarity below the reuse threshold and forces a
+        # clean-slate prompt eval (~2ms/token on the appliance GPU — seconds,
+        # not minutes). Remove only after upstream fixes slot reuse AND an
+        # interleaved briefing/triage load test shows no bleed.
+        nonce = f"[req {uuid.uuid4().hex}]\n"
+        if system:
+            system = nonce + system
+        else:
+            prompt = nonce + prompt
         payload: dict = {
             "model": self.model,
             "prompt": prompt,
