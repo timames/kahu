@@ -12,7 +12,6 @@ Kahu is an on-premises AI security operations appliance. It combines Wazuh (SIEM
 ```bash
 # Install (editable, with dev deps)
 pip install -e ".[dev]"
-pip install aiosqlite   # NOT in pyproject dev extras — required by the DB tests, see Testing
 
 # Run API server
 uvicorn kahu.main:app --reload --port 8000
@@ -133,7 +132,7 @@ Separate Docker service (`generator/`) producing synthetic security events for d
 
 - `pytest-asyncio` with `asyncio_mode = "auto"` — async test functions need no decorator.
 - **There is no `conftest.py`.** Tests that need a DB construct their own in-memory engine fixture (`create_async_engine("sqlite+aiosqlite:///:memory:")` + `Base.metadata.create_all`). Copy the fixture from `tests/test_pono/test_integration.py` when adding one.
-- `aiosqlite` is required by those tests but is **not** declared in `[project.optional-dependencies].dev`. `tests/test_tolerance_audit.py` and `tests/test_auto_disposition_floor.py` guard with `pytest.importorskip` — meaning they silently *skip* rather than fail — while `tests/test_validation.py` and `tests/test_pono/test_integration.py` hard-fail without it. Install it explicitly.
+- `aiosqlite` is declared in the dev extras and required by those tests.
 - The suite exercises async DB paths on aiosqlite, not asyncpg. Postgres-specific behaviour (notably JSON operators such as the `Alert.pipeline_provenance["auto_disposed"].as_string()` query in `services/pono.py`) is not covered — verify those against a real Postgres.
 - `tests/synthetic/generators.py` holds shared fixture builders for alert payloads.
 
