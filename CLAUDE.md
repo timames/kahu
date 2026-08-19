@@ -119,7 +119,7 @@ Env vars or `.env`, loaded by pydantic-settings in `src/kahu/config.py` (see `.e
 
 JSON config lives in `config/` at the repo root: `weights_schema.json` (Pono weights) and `tuning_config.json` / `risk_config.json` / `canary_config.json` (consumed by `kahu_tuner` via `KAHU_CONFIG_DIR`).
 
-**Path gotcha:** `services/pono.py` resolves `_SCHEMA_PATH = Path(__file__).resolve().parents[3] / "config" / "weights_schema.json"`. That works from a source checkout (`src/kahu/services/` → repo root) but **not** from an installed wheel, and the `Dockerfile` copies only `pyproject.toml`, `src/`, and `alembic/` — `config/` never enters the image. In the container the Pono loop raises `FileNotFoundError`, which `run_pono_loop` catches and logs, so the score silently stops updating and `POST /api/pono/recalculate` 500s. If you touch Pono deployment, fix this (ship `config/` as package data or mount it) rather than working around it.
+**Config-dir resolution:** all consumers honor `KAHU_CONFIG_DIR` (`settings.kahu_config_dir` in `config.py` for the core; the env var directly in `kahu_pono/main.py` and `kahu_tuner`), falling back to the repo-root `config/` walk which only works from a source checkout. The `Dockerfile` copies `config/` to `/app/config` and sets `KAHU_CONFIG_DIR=/app/config`. If you add a new JSON config consumer, resolve it through `KAHU_CONFIG_DIR` — never a `parents[N]` walk from `__file__` alone, which breaks in an installed wheel.
 
 ### Frontend
 

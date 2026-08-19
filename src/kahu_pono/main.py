@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -23,7 +24,14 @@ _schema: WeightsSchema | None = None
 def get_schema() -> WeightsSchema:
     global _schema
     if _schema is None:
-        schema_path = Path(__file__).resolve().parents[2] / "config" / "weights_schema.json"
+        # KAHU_CONFIG_DIR first (works from an installed wheel — same env var the
+        # container and kahu_tuner use); fall back to the source-checkout walk
+        # (src/kahu_pono/main.py -> repo root / config).
+        config_dir = os.environ.get("KAHU_CONFIG_DIR")
+        if config_dir:
+            schema_path = Path(config_dir) / "weights_schema.json"
+        else:
+            schema_path = Path(__file__).resolve().parents[2] / "config" / "weights_schema.json"
         _schema = WeightsSchema.from_file(schema_path)
     return _schema
 
