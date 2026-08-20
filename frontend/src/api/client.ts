@@ -224,6 +224,12 @@ export const opensearchQuery = (body: {
     body: JSON.stringify(body),
   });
 
+export const suggestLucene = (prompt: string) =>
+  request<{ query: string }>("/devices/opensearch/suggest", {
+    method: "POST",
+    body: JSON.stringify({ prompt }),
+  });
+
 // ── Recon ──
 export const dnsLookup = (target: string) =>
   request(`/recon/dns?target=${encodeURIComponent(target)}`);

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { opensearchQuery, type OpenSearchResult } from "@/api/client";
-import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react";
+import { opensearchQuery, suggestLucene, type OpenSearchResult } from "@/api/client";
+import { ChevronDown, ChevronRight, Loader2, Search, Sparkles } from "lucide-react";
 import { SeverityChip } from "@/components/DevicesTab";
 
 const PAGE_SIZE = 50;
@@ -43,6 +43,17 @@ export function WazuhSearchTab() {
   const [result, setResult] = useState<OpenSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openHit, setOpenHit] = useState<string | null>(null);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const aiMutation = useMutation({
+    mutationFn: (prompt: string) => suggestLucene(prompt),
+    onSuccess: (r) => {
+      setQuery(r.query);
+      setAiError(null);
+    },
+    onError: (err: Error) => setAiError(err.message),
+  });
 
   const mutation = useMutation({
     mutationFn: (opts: { offset: number }) => {
@@ -123,9 +134,45 @@ export function WazuhSearchTab() {
             Search
           </button>
         </form>
+        {/* AI Lucene helper */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (aiPrompt.trim()) aiMutation.mutate(aiPrompt.trim());
+          }}
+          className="flex gap-2 mt-2"
+        >
+          <input
+            type="text"
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder='Describe what to find, e.g. "failed windows logons for administrator"'
+            maxLength={500}
+            className="flex-1 bg-kahu-elevated border border-kahu-border rounded-lg px-3 py-2
+                       text-sm text-white placeholder-slate-600 focus:outline-none focus:border-kahu-accent"
+          />
+          <button
+            type="submit"
+            disabled={aiMutation.isPending || !aiPrompt.trim()}
+            title="Generate a Lucene query with the local AI model"
+            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-kahu-elevated border border-kahu-border
+                       hover:border-kahu-accent/40 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+          >
+            {aiMutation.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Sparkles size={14} className="text-kahu-accent" />
+            )}
+            Ask AI
+          </button>
+        </form>
+        {aiError && (
+          <p className="text-[11px] text-red-400 mt-1.5 break-all">{aiError}</p>
+        )}
         <p className="text-[11px] text-slate-600 mt-2">
           Queries run against the local Wazuh indexer. Index pattern must start with{" "}
-          <code className="text-slate-500">wazuh-</code>.
+          <code className="text-slate-500">wazuh-</code>. Ask AI drafts a Lucene query into the
+          box above — review it, then hit Search.
         </p>
       </div>
 

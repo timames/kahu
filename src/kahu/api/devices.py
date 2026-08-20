@@ -16,6 +16,7 @@ Security notes:
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import UTC, datetime
@@ -23,6 +24,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
+from kahu.clients.ollama import OllamaClient
 from kahu.clients.wazuh import WazuhAPIClient, WazuhIndexerClient
 
 logger = logging.getLogger(__name__)
@@ -101,6 +103,14 @@ class OpenSearchResponse(BaseModel):
     total: int
     took_ms: int
     hits: list[OpenSearchHit]
+
+
+class LuceneSuggestRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=500)
+
+
+class LuceneSuggestResponse(BaseModel):
+    query: str
 
 
 # ── Shared fetch (also used by connectors overview) ────────
@@ -259,6 +269,62 @@ async def device_sca_checks(
         for item in items
     ]
     return ScaChecksResponse(checks=checks, total=total, offset=offset, limit=limit)
+
+
+# Grammar-constrained response shape for the Lucene helper — the model can only
+# emit a single-field JSON object, never prose or extra keys.
+_LUCENE_SCHEMA = {
+    "type": "object",
+    "properties": {"query": {"type": "string"}},
+    "required": ["query"],
+}
+
+_LUCENE_SYSTEM_PROMPT = """You translate an analyst's natural-language request into a single \
+Lucene query string for the OpenSearch query_string parser, run against Wazuh alert indices \
+(wazuh-alerts-*).
+
+Common fields:
+- rule.level (integer 0-16; >=7 medium, >=10 high, >=13 critical), rule.id, rule.description, \
+rule.groups
+- agent.name, agent.id, agent.ip
+- timestamp (do NOT emit time filters — the UI applies the time range separately)
+- data.srcip, data.dstip, data.srcport, data.dstport, data.srcuser, data.dstuser
+- data.win.eventdata.* (Windows events: targetUserName, image, commandLine, ipAddress), \
+data.win.system.eventID
+- location, predecoder.hostname, decoder.name, full_log
+
+Syntax rules:
+- field:value ; quote multi-word values: rule.description:"logon failure"
+- Ranges: rule.level:>=10 or rule.level:[7 TO 12]
+- Boolean: AND OR NOT with parentheses; wildcards: data.srcip:192.168.1.*
+- Free text with no obvious field: search full_log or rule.description
+- Output ONLY the query string in the JSON "query" field — no explanation, no time ranges."""
+
+
+@router.post("/opensearch/suggest", response_model=LuceneSuggestResponse)
+async def suggest_lucene(body: LuceneSuggestRequest) -> LuceneSuggestResponse:
+    """Translate a natural-language request into a Lucene query via the local LLM.
+
+    The result is only a suggestion placed into the query box for the analyst
+    to review and run — it is executed through the same guarded query_string
+    endpoint as hand-typed queries, so a bad or malicious suggestion can at
+    worst match the wrong documents, never touch a non-wazuh index.
+    """
+    ollama = OllamaClient()
+    try:
+        raw = await ollama.generate(
+            prompt=body.prompt,
+            system=_LUCENE_SYSTEM_PROMPT,
+            num_predict=256,
+            options={"temperature": 0.1},
+            response_format=_LUCENE_SCHEMA,
+        )
+        query = str(json.loads(raw).get("query", "")).strip()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail="AI model unavailable") from exc
+    if not query:
+        raise HTTPException(status_code=502, detail="Model returned an empty query")
+    return LuceneSuggestResponse(query=query)
 
 
 @router.post("/opensearch", response_model=OpenSearchResponse)
