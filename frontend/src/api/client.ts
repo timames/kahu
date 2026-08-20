@@ -579,9 +579,23 @@ export interface CaseTicket {
   alert_degraded: boolean;
 }
 
+export interface RelatedEvent {
+  timestamp?: string;
+  location?: string;
+  rule?: { id?: string; level?: number; description?: string; groups?: string[] };
+  data?: Record<string, unknown>;
+}
+
 export interface CaseTicketDetail extends CaseTicket {
   alert_recommended_actions: string[];
-  alert_enrichment: Record<string, unknown> | null;
+  alert_enrichment: {
+    asset_context?: Record<string, string>;
+    related_events?: RelatedEvent[];
+    [key: string]: unknown;
+  } | null;
+  alert_source_ip: string | null;
+  alert_dest_ip: string | null;
+  alert_full_log: string | null;
 }
 
 export interface CaseListResponse {

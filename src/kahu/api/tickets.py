@@ -55,6 +55,9 @@ class CaseTicketOut(BaseModel):
 class CaseTicketDetailOut(CaseTicketOut):
     alert_recommended_actions: list[str] = []
     alert_enrichment: dict | None = None
+    alert_source_ip: str | None = None
+    alert_dest_ip: str | None = None
+    alert_full_log: str | None = None
 
 
 class CaseListResponse(BaseModel):
@@ -105,10 +108,15 @@ def _case_out(t: Ticket, detail: bool = False) -> CaseTicketOut:
         "alert_degraded": llm.get("degraded", False),
     }
     if detail:
+        raw = (alert.raw_event or {}) if alert else {}
+        data = raw.get("data") or {}
         return CaseTicketDetailOut(
             **base,
             alert_recommended_actions=llm.get("recommended_actions", []),
             alert_enrichment=alert.enrichment if alert else None,
+            alert_source_ip=data.get("srcip") or None,
+            alert_dest_ip=data.get("dstip") or None,
+            alert_full_log=raw.get("full_log") or None,
         )
     return CaseTicketOut(**base)
 

@@ -163,7 +163,7 @@ function ModalShell({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-kahu-card border border-kahu-border rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6 shadow-xl">
+      <div className="relative bg-kahu-card border border-kahu-border rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6 shadow-xl">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">{title}</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
@@ -232,6 +232,9 @@ function CaseDetailModal({
   const isClosed = t?.status === "closed";
   const isInvestigation = (t?.ticket_type ?? kind) === "investigation";
 
+  const assetContext = t?.alert_enrichment?.asset_context ?? null;
+  const relatedEvents = t?.alert_enrichment?.related_events ?? [];
+
   return (
     <ModalShell
       onClose={onClose}
@@ -279,6 +282,37 @@ function CaseDetailModal({
             )}
           </div>
 
+          {(t.alert_rule_description || t.alert_source_ip || t.alert_dest_ip || assetContext) && (
+            <div className="mb-4">
+              <div className="text-xs text-slate-500 font-medium mb-1">Alert details</div>
+              <div className="text-xs text-slate-300 bg-kahu-elevated border border-kahu-border rounded-lg p-3 space-y-1">
+                {t.alert_rule_description && <div>{t.alert_rule_description}</div>}
+                {t.alert_source_ip && (
+                  <div>
+                    <span className="text-slate-500">Source IP:</span> {t.alert_source_ip}
+                  </div>
+                )}
+                {t.alert_dest_ip && (
+                  <div>
+                    <span className="text-slate-500">Destination IP:</span> {t.alert_dest_ip}
+                  </div>
+                )}
+                {assetContext?.hostname && (
+                  <div>
+                    <span className="text-slate-500">Host:</span> {assetContext.hostname}
+                    {assetContext.ip ? ` (${assetContext.ip})` : ""}
+                  </div>
+                )}
+                {assetContext?.os && (
+                  <div>
+                    <span className="text-slate-500">OS:</span> {assetContext.os}
+                    {assetContext.os_version ? ` ${assetContext.os_version}` : ""}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {t.alert_llm_explanation && !t.alert_degraded && (
             <div className="mb-4">
               <div className="text-xs text-slate-500 font-medium mb-1">AI analysis</div>
@@ -296,6 +330,37 @@ function CaseDetailModal({
                   <li key={i}>{a}</li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {relatedEvents.length > 0 && (
+            <div className="mb-4">
+              <div className="text-xs text-slate-500 font-medium mb-1">
+                Related events on this device ({relatedEvents.length})
+              </div>
+              <div className="flex flex-col gap-1 max-h-56 overflow-y-auto">
+                {relatedEvents.map((e, i) => (
+                  <div
+                    key={i}
+                    className="text-xs bg-kahu-elevated border border-kahu-border rounded-lg px-2.5 py-1.5"
+                  >
+                    <div className="flex items-center gap-2 text-slate-500">
+                      {e.timestamp && <span>{new Date(e.timestamp).toLocaleString()}</span>}
+                      {e.rule?.level != null && <span>L{e.rule.level}</span>}
+                    </div>
+                    <div className="text-slate-300">{e.rule?.description ?? "—"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {t.alert_full_log && (
+            <div className="mb-4">
+              <div className="text-xs text-slate-500 font-medium mb-1">Raw log</div>
+              <pre className="text-[11px] font-mono text-slate-300 bg-kahu-elevated border border-kahu-border rounded-lg p-3 whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
+                {t.alert_full_log}
+              </pre>
             </div>
           )}
 
