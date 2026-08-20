@@ -49,9 +49,10 @@ npm run build     # tsc -b && vite build
 
 ### Docker (full stack)
 ```bash
-docker compose up -d --build              # core, postgres, redis, ollama, wazuh-{manager,indexer,dashboard}, greenbone, generator
+docker compose up -d --build              # core, postgres, redis, ollama, wazuh-{manager,indexer,dashboard}, greenbone
 docker compose up -d core postgres redis  # minimal for API dev
 docker compose --profile cloud up -d cloudflared   # Cloudflare tunnel (opt-in profile)
+docker compose --profile demo up -d generator      # synthetic demo event generator (opt-in profile)
 ```
 
 The Wazuh API (55000) is deliberately not published to the host — Windows reserves that port range. Reach it from inside the network at `wazuh-manager:55000`. `kahu_tuner` has no compose service; it is a standalone container/service driven by `KAHU_CONFIG_DIR` and `KAHU_SIGNING_KEY`.

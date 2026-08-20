@@ -202,10 +202,14 @@ services:
       retries: 20
       start_period: 300s
 
+  # Synthetic event generator — demo load only, opt-in profile.
+  # To enable: docker compose --profile demo up -d generator
   generator:
     build: ./generator
     container_name: kahu-generator
     restart: unless-stopped
+    profiles:
+      - demo
     environment:
       TARGET_HOST: wazuh-manager
       SYSLOG_PORT: "514"
