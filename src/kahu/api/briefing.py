@@ -25,11 +25,12 @@ async def get_briefing(session: AsyncSession = Depends(get_session)) -> dict:  #
     """Generate an AI security briefing based on current state."""
 
     # Gather context
-    # 1. Undispositioned alerts by severity
+    # 1. Undispositioned alerts by severity (muted alerts are audit-only,
+    # never part of the working queue)
     stmt = (
         select(Alert.severity, func.count())
         .outerjoin(AlertDisposition)
-        .where(AlertDisposition.id.is_(None))
+        .where(AlertDisposition.id.is_(None), Alert.muted == False)  # noqa: E712
         .group_by(Alert.severity)
     )
     result = await session.execute(stmt)

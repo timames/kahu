@@ -105,11 +105,12 @@ class CoachResponse(BaseModel):
 async def glance(session: AsyncSession = Depends(get_session)) -> GlanceResponse:  # noqa: B008
     """The lock-screen view. One color, one number, one sentence."""
 
-    # Count undispositioned alerts by severity
+    # Count undispositioned alerts by severity. Muted alerts are persisted
+    # for audit but never surface in the queue, so they don't count here.
     stmt = (
         select(Alert.severity, func.count())
         .outerjoin(AlertDisposition)
-        .where(AlertDisposition.id.is_(None))
+        .where(AlertDisposition.id.is_(None), Alert.muted == False)  # noqa: E712
         .group_by(Alert.severity)
     )
     result = await session.execute(stmt)
@@ -180,7 +181,7 @@ async def feed(
     stmt = (
         select(Alert)
         .outerjoin(AlertDisposition)
-        .where(AlertDisposition.id.is_(None))
+        .where(AlertDisposition.id.is_(None), Alert.muted == False)  # noqa: E712
         .order_by(severity_order, Alert.created_at.desc())
         .limit(limit)
     )
@@ -192,7 +193,7 @@ async def feed(
         select(func.count())
         .select_from(Alert)
         .outerjoin(AlertDisposition)
-        .where(AlertDisposition.id.is_(None))
+        .where(AlertDisposition.id.is_(None), Alert.muted == False)  # noqa: E712
     )
     total = await session.scalar(count_stmt) or 0
     remaining = max(0, total - len(alerts))
@@ -319,7 +320,12 @@ async def batch_acknowledge(
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> BatchAckResponse:
     """Acknowledge all pending alerts in one action."""
-    stmt = select(Alert).outerjoin(AlertDisposition).where(AlertDisposition.id.is_(None))
+    # Muted alerts are audit-only; batch-ack must not stamp dispositions on them.
+    stmt = (
+        select(Alert)
+        .outerjoin(AlertDisposition)
+        .where(AlertDisposition.id.is_(None), Alert.muted == False)  # noqa: E712
+    )
     result = await session.execute(stmt)
     alerts = result.scalars().all()
 
@@ -387,7 +393,7 @@ async def score(
             select(func.count())
             .select_from(Alert)
             .outerjoin(AlertDisposition)
-            .where(AlertDisposition.id.is_(None))
+            .where(AlertDisposition.id.is_(None), Alert.muted == False)  # noqa: E712
         )
         or 0
     )
@@ -900,7 +906,7 @@ async def auto_triage(
     stmt = (
         select(Alert)
         .outerjoin(AlertDisposition)
-        .where(AlertDisposition.id.is_(None))
+        .where(AlertDisposition.id.is_(None), Alert.muted == False)  # noqa: E712
         .where(Alert.llm_triage.isnot(None))
     )
     result = await session.execute(stmt)
@@ -926,7 +932,7 @@ async def auto_triage(
             select(func.count())
             .select_from(Alert)
             .outerjoin(AlertDisposition)
-            .where(AlertDisposition.id.is_(None))
+            .where(AlertDisposition.id.is_(None), Alert.muted == False)  # noqa: E712
         )
         or 0
     )
