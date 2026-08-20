@@ -66,20 +66,19 @@ async def get_alert_summary(
     rule_result = await session.execute(rule_stmt)
     top_rules = [{"rule_id": r[0], "description": r[1], "count": r[2]} for r in rule_result.all()]
 
-    # Top source IPs (from raw_event JSON)
-    # This uses a postgres JSON extraction
+    # Top source IPs (from raw_event JSON). Use as_string() — the column is
+    # the portable generic JSON type (works on Postgres and SQLite); .astext
+    # is JSONB-only and raises at statement construction time.
+    srcip = Alert.raw_event["data"]["srcip"].as_string()
     ip_stmt = (
-        select(
-            Alert.raw_event["data"]["srcip"].astext.label("srcip"),
-            func.count().label("cnt"),
-        )
+        select(srcip.label("srcip"), func.count().label("cnt"))
         .where(
             Alert.created_at >= since,
             Alert.created_at < until,
-            Alert.raw_event["data"]["srcip"].astext.isnot(None),
-            Alert.raw_event["data"]["srcip"].astext != "",
+            srcip.isnot(None),
+            srcip != "",
         )
-        .group_by(Alert.raw_event["data"]["srcip"].astext)
+        .group_by(srcip)
         .order_by(func.count().desc())
         .limit(10)
     )
@@ -237,13 +236,15 @@ async def get_evidence_summary(
     by_type = {r[0]: r[1] for r in type_result.all()}
 
     # Get the records themselves for the package
+    # Chain order is `sequence`, not timestamp — timestamps are not a total
+    # order under concurrent writers and falsely report breaks.
     records_stmt = (
         select(EvidenceRecord)
         .where(
             EvidenceRecord.timestamp >= since,
             EvidenceRecord.timestamp < until,
         )
-        .order_by(EvidenceRecord.timestamp.asc())
+        .order_by(EvidenceRecord.sequence.asc())
     )
     records_result = await session.execute(records_stmt)
     records = records_result.scalars().all()

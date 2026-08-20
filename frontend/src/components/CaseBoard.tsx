@@ -11,6 +11,7 @@ import {
   type Report,
 } from "@/api/client";
 import { severityClass, timeAgo } from "@/lib/severity";
+import { Markdown } from "@/components/Markdown";
 import {
   ArrowUpCircle,
   CheckCircle,
@@ -301,9 +302,9 @@ function CaseDetailModal({
           {report && (
             <div className="mb-4">
               <div className="text-xs text-slate-500 font-medium mb-1">Incident report</div>
-              <p className="text-sm text-slate-300 bg-kahu-elevated border border-kahu-border rounded-lg p-3 whitespace-pre-wrap">
-                {report.narrative}
-              </p>
+              <div className="bg-kahu-elevated border border-kahu-border rounded-lg p-3">
+                <Markdown>{report.narrative}</Markdown>
+              </div>
             </div>
           )}
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { getExecutiveReport, getEvidencePackage, type Report } from "@/api/client";
+import { Markdown } from "@/components/Markdown";
 import { FileText, Shield, AlertTriangle, Loader2 } from "lucide-react";
 
 type ReportTab = "executive" | "evidence";
@@ -54,6 +55,13 @@ export function Reports() {
         </button>
       </div>
 
+      {generate.isError && (
+        <div className="flex items-center gap-2 text-red-400 text-xs mb-4 bg-red-400/10 px-3 py-2 rounded-lg">
+          <AlertTriangle size={12} />
+          Report generation failed — {generate.error instanceof Error ? generate.error.message : "unknown error"}
+        </div>
+      )}
+
       {/* Report output */}
       {report && (
         <div className="bg-kahu-card border border-kahu-border rounded-xl p-5">
@@ -79,9 +87,7 @@ export function Reports() {
             </div>
           )}
 
-          <div className="prose prose-invert prose-sm max-w-none text-slate-300 leading-relaxed whitespace-pre-wrap">
-            {report.narrative}
-          </div>
+          <Markdown>{report.narrative}</Markdown>
 
           {/* Data summary for executive reports */}
           {report.report_type === "executive" && report.data && (
