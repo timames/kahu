@@ -207,6 +207,9 @@ async def promote_case(
 
     await promote_ticket(session, ticket, analyst=user.username)
     await session.commit()
+    # updated_at is SQL-side onupdate → expired after the UPDATE; refresh it
+    # explicitly so _case_out doesn't trigger a sync lazy-load in async context.
+    await session.refresh(ticket, attribute_names=["updated_at"])
     return _case_out(ticket)
 
 
@@ -230,6 +233,7 @@ async def close_case(
         analyst=user.username,
     )
     await session.commit()
+    await session.refresh(ticket, attribute_names=["updated_at"])
     return _case_out(ticket)
 
 
@@ -254,4 +258,5 @@ async def update_case(
     if body.assigned_to is not None:
         ticket.assigned_to = body.assigned_to
     await session.commit()
+    await session.refresh(ticket, attribute_names=["updated_at"])
     return _case_out(ticket)
