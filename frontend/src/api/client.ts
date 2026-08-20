@@ -78,7 +78,7 @@ export const getHistory = (
 };
 
 export const getWazuhLogs = (
-  opts: { limit?: number; offset?: number; severity?: string; search?: string } = {},
+  opts: { limit?: number; offset?: number; severity?: string; search?: string; agent?: string } = {},
 ) => {
   const p = new URLSearchParams({
     limit: String(opts.limit ?? 100),
@@ -86,6 +86,7 @@ export const getWazuhLogs = (
   });
   if (opts.severity) p.set("severity", opts.severity);
   if (opts.search) p.set("search", opts.search);
+  if (opts.agent) p.set("agent", opts.agent);
   return request<{ logs: WazuhLog[]; total: number; offset: number; limit: number }>(
     `/triage/wazuh-logs?${p}`,
   );
@@ -187,6 +188,41 @@ export const deleteConnectorSource = (sourceId: string) =>
   request(`/connectors/sources/${sourceId}`, { method: "DELETE" });
 export const toggleConnectorSource = (sourceId: string) =>
   request<ConnectorSource>(`/connectors/sources/${sourceId}/toggle`, { method: "PATCH" });
+
+// ── Devices ──
+export const getDevices = () =>
+  request<{ devices: Device[]; error: string | null }>("/devices");
+
+export const getDeviceSca = (agentId: string) =>
+  request<ScaPolicy[]>(`/devices/${agentId}/sca`);
+
+export const getDeviceScaChecks = (
+  agentId: string,
+  policyId: string,
+  opts: { result?: string; offset?: number; limit?: number } = {},
+) => {
+  const p = new URLSearchParams({
+    limit: String(opts.limit ?? 50),
+    offset: String(opts.offset ?? 0),
+  });
+  if (opts.result) p.set("result", opts.result);
+  return request<{ checks: ScaCheck[]; total: number; offset: number; limit: number }>(
+    `/devices/${agentId}/sca/${policyId}/checks?${p}`,
+  );
+};
+
+export const opensearchQuery = (body: {
+  index_pattern: string;
+  query: string;
+  time_from?: string;
+  time_to?: string;
+  size?: number;
+  offset?: number;
+}) =>
+  request<OpenSearchResult>("/devices/opensearch", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 
 // ── Recon ──
 export const dnsLookup = (target: string) =>
@@ -545,6 +581,47 @@ export interface ConnectorTestResult {
   success: boolean;
   message: string;
   events_sample: number;
+}
+
+export interface Device {
+  agent_id: string;
+  name: string;
+  ip: string | null;
+  status: string;
+  os_name: string;
+  os_platform: string;
+  date_add: string | null;
+  last_keepalive: string | null;
+  events_today: number;
+  events_total: number;
+  is_manager: boolean;
+}
+
+export interface ScaPolicy {
+  policy_id: string;
+  name: string;
+  description: string;
+  pass_count: number;
+  fail_count: number;
+  invalid_count: number;
+  total_checks: number;
+  score: number;
+  end_scan: string | null;
+}
+
+export interface ScaCheck {
+  check_id: string;
+  title: string;
+  result: string;
+  rationale: string | null;
+  remediation: string | null;
+  description: string | null;
+}
+
+export interface OpenSearchResult {
+  total: number;
+  took_ms: number;
+  hits: { id: string; index: string; source: Record<string, unknown> }[];
 }
 
 export interface ScoreData {

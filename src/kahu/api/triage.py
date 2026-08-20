@@ -307,6 +307,7 @@ def _level_to_severity(level: int) -> str:
 async def wazuh_logs(
     severity: str | None = Query(None, pattern="^(critical|high|medium|low|info)$"),  # noqa: B008
     search: str | None = Query(None, max_length=200),  # noqa: B008
+    agent: str | None = Query(None, max_length=100),  # noqa: B008
     offset: int = Query(0, ge=0, le=9000),  # noqa: B008
     limit: int = Query(100, ge=1, le=200),  # noqa: B008
 ) -> WazuhLogsResponse:
@@ -321,6 +322,8 @@ async def wazuh_logs(
     if severity:
         lo, hi = _SEVERITY_LEVEL_RANGES[severity]
         filters.append({"range": {"rule.level": {"gte": lo, "lte": hi}}})
+    if agent:
+        filters.append({"term": {"agent.name": agent}})
 
     query: dict = {"match_all": {}}
     if search:

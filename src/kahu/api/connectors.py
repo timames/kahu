@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -12,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kahu.clients.wazuh import WazuhAPIClient, WazuhIndexerClient
+from kahu.api.devices import fetch_wazuh_devices
 from kahu.db import get_session
 from kahu.models.connectors import ConnectorInstance, ConnectorStatus
 from kahu.services.connectors.catalog import CATALOG, get_catalog, get_categories
@@ -83,17 +82,15 @@ async def catalog():
 
 @router.get("/sources", response_model=list[ConnectorOut])
 async def list_sources(session: AsyncSession = Depends(get_session)):  # noqa: B008
-    """List all configured connector instances plus live Wazuh sources."""
+    """List all configured connector instances.
+
+    Wazuh agents are no longer merged in here — they live on /api/devices.
+    """
     result = await session.execute(
         select(ConnectorInstance).order_by(ConnectorInstance.created_at.desc())
     )
     instances = result.scalars().all()
-    sources = [_to_out(c) for c in instances]
-
-    # Merge live Wazuh sources
-    wazuh_sources = await _get_wazuh_sources()
-    sources = wazuh_sources + sources
-    return sources
+    return [_to_out(c) for c in instances]
 
 
 @router.get("/overview", response_model=SourcesOverview)
@@ -106,12 +103,13 @@ async def sources_overview(session: AsyncSession = Depends(get_session)):  # noq
     errors = sum(1 for c in instances if c.status == ConnectorStatus.ERROR)
     events = sum(c.events_today for c in instances)
 
-    # Add live Wazuh sources
-    wazuh_sources = await _get_wazuh_sources()
-    wazuh_active = sum(1 for s in wazuh_sources if s.status == "active")
-    wazuh_events = sum(s.events_today for s in wazuh_sources)
+    # Wazuh agents still count toward appliance-wide totals even though they
+    # are listed on the Devices tab, not as connector sources.
+    wazuh_devices, _ = await fetch_wazuh_devices()
+    wazuh_active = sum(1 for d in wazuh_devices if d.status == "active")
+    wazuh_events = sum(d.events_today for d in wazuh_devices)
 
-    total = len(instances) + len(wazuh_sources)
+    total = len(instances) + len(wazuh_devices)
     active += wazuh_active
     events += wazuh_events
 
@@ -127,11 +125,11 @@ async def sources_overview(session: AsyncSession = Depends(get_session)):  # noq
             cat_counts[cat]["active"] += 1
         cat_counts[cat]["events_today"] += c.events_today
 
-    if wazuh_sources:
+    if wazuh_devices:
         wazuh_cat = cat_counts.get(
             "siem", {"id": "siem", "sources": 0, "active": 0, "events_today": 0}
         )
-        wazuh_cat["sources"] += len(wazuh_sources)
+        wazuh_cat["sources"] += len(wazuh_devices)
         wazuh_cat["active"] += wazuh_active
         wazuh_cat["events_today"] += wazuh_events
         cat_counts["siem"] = wazuh_cat
@@ -285,107 +283,3 @@ def _simulate_test(ct, instance) -> tuple[bool, str]:
 
     return True, f"Successfully connected to {ct.name}"
 
-
-async def _get_wazuh_sources() -> list[ConnectorOut]:
-    """Query Wazuh API for manager + agents and indexer for event counts."""
-    try:
-        wazuh = WazuhAPIClient()
-        await wazuh.authenticate()
-        resp = await wazuh.api_get(
-            "/agents",
-            params={
-                "limit": 500,
-                "select": "id,name,ip,status,os.platform,os.name,dateAdd,lastKeepAlive",
-            },
-        )
-        agents = resp.get("data", {}).get("affected_items", [])
-    except Exception:
-        logger.debug("Could not fetch Wazuh agents", exc_info=True)
-        return []
-
-    # Get today's event counts per agent from the indexer
-    agent_events: dict[str, int] = {}
-    total_events: dict[str, int] = {}
-    try:
-        indexer = WazuhIndexerClient()
-        count_resp = await indexer.search(
-            "wazuh-alerts-*",
-            {"size": 0, "aggs": {"by_agent": {"terms": {"field": "agent.name", "size": 500}}}},
-        )
-        for bucket in count_resp.get("aggregations", {}).get("by_agent", {}).get("buckets", []):
-            total_events[bucket["key"]] = bucket["doc_count"]
-
-        today = datetime.now(UTC).strftime("%Y.%m.%d")
-        today_resp = await indexer.search(
-            f"wazuh-alerts-4.x-{today}",
-            {"size": 0, "aggs": {"by_agent": {"terms": {"field": "agent.name", "size": 500}}}},
-        )
-        for bucket in today_resp.get("aggregations", {}).get("by_agent", {}).get("buckets", []):
-            agent_events[bucket["key"]] = bucket["doc_count"]
-    except Exception:
-        logger.debug("Could not fetch indexer event counts", exc_info=True)
-
-    sources = []
-    for agent in agents:
-        agent_id = agent.get("id", "000")
-        name = agent.get("name", "unknown")
-        status = agent.get("status", "disconnected")
-        os_name = agent.get("os", {}).get("name", "")
-        os_platform = agent.get("os", {}).get("platform", "")
-        date_add = agent.get("dateAdd")
-        last_alive = agent.get("lastKeepAlive")
-
-        is_manager = agent_id == "000"
-        icon = (
-            "\U0001f5a5\ufe0f"
-            if os_platform == "windows"
-            else "\U0001f4e1"
-            if is_manager
-            else "\U0001f427"
-            if os_platform == "linux"
-            else "\U0001f4bb"
-        )
-        type_name = (
-            "Wazuh Manager"
-            if is_manager
-            else f"Wazuh Agent ({os_name or os_platform or 'unknown'})"
-        )
-
-        mapped_status = (
-            "active"
-            if status in ("active", "Active")
-            else "error"
-            if status == "disconnected"
-            else "pending"
-        )
-
-        created = None
-        if date_add:
-            try:
-                created = datetime.fromisoformat(date_add.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                created = datetime.now(UTC)
-
-        last_event = None
-        if last_alive:
-            with contextlib.suppress(ValueError, AttributeError):
-                last_event = datetime.fromisoformat(last_alive.replace("Z", "+00:00"))
-
-        sources.append(
-            ConnectorOut(
-                id=uuid.uuid5(uuid.NAMESPACE_DNS, f"wazuh-agent-{agent_id}"),
-                connector_type="wazuh_agent",
-                name=name,
-                type_name=type_name,
-                type_icon=icon,
-                category="siem",
-                status=mapped_status,
-                events_today=agent_events.get(name, 0),
-                events_total=total_events.get(name, 0),
-                last_event_at=last_event,
-                error_message=None if mapped_status != "error" else f"Agent {status}",
-                created_at=created or datetime.now(UTC),
-            )
-        )
-
-    return sources

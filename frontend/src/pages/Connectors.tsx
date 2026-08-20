@@ -27,16 +27,62 @@ import {
   Loader2,
   Activity,
   AlertTriangle,
-  Download,
+  Monitor,
+  Search,
 } from "lucide-react";
 import { timeAgo } from "@/lib/severity";
+import { DevicesTab } from "@/components/DevicesTab";
+import { WazuhSearchTab } from "@/components/WazuhSearchTab";
 
 type ModalState =
   | { kind: "closed" }
   | { kind: "add"; connector: ConnectorType }
   | { kind: "detail"; source: ConnectorSource };
 
+type Tab = "connectors" | "devices" | "search";
+
+const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: "connectors", label: "Connectors", icon: <Cable size={13} /> },
+  { id: "devices", label: "Devices", icon: <Monitor size={13} /> },
+  { id: "search", label: "Search", icon: <Search size={13} /> },
+];
+
 export function Connectors() {
+  const [tab, setTab] = useState<Tab>("connectors");
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-xl font-semibold text-white">Connectors</h1>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-2 mb-5">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              tab === t.id
+                ? "bg-kahu-accent text-white"
+                : "bg-kahu-elevated text-slate-400 hover:text-white"
+            }`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "connectors" && <ConnectorsTab />}
+      {tab === "devices" && <DevicesTab />}
+      {tab === "search" && <WazuhSearchTab />}
+    </div>
+  );
+}
+
+function ConnectorsTab() {
   const qc = useQueryClient();
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -62,14 +108,12 @@ export function Connectors() {
     ? connectors.filter((c) => c.category === categoryFilter)
     : connectors;
 
-  // Count configured sources (exclude wazuh_agent live sources)
-  const configuredIds = new Set((sources ?? []).filter((s) => s.connector_type !== "wazuh_agent").map((s) => s.connector_type));
+  // Count configured connector types
+  const configuredIds = new Set((sources ?? []).map((s) => s.connector_type));
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5">
-        <h1 className="text-xl font-semibold text-white">Connectors</h1>
+      <div className="flex justify-end mb-4">
         <span className="text-sm text-slate-400">
           {overview?.total_sources ?? 0} sources &middot;{" "}
           {overview?.active_sources ?? 0} active
@@ -99,36 +143,6 @@ export function Connectors() {
           />
         </div>
       )}
-
-      {/* Deploy agent */}
-      <div className="bg-kahu-card border border-kahu-border rounded-xl p-4 mb-6 flex flex-col md:flex-row md:items-center gap-3">
-        <div className="flex-1">
-          <h2 className="text-sm font-medium text-white mb-0.5">Deploy Wazuh Agent</h2>
-          <p className="text-xs text-slate-500">
-            Download and run the installer on a host to enroll it with this appliance.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <a
-            href="/api/agents/install.ps1"
-            download
-            className="flex items-center gap-1.5 px-3 py-2 bg-kahu-elevated border border-kahu-border
-                       rounded-lg text-sm text-white hover:border-kahu-accent/40 transition-colors"
-          >
-            <Download size={14} />
-            Windows
-          </a>
-          <a
-            href="/api/agents/install.sh"
-            download
-            className="flex items-center gap-1.5 px-3 py-2 bg-kahu-elevated border border-kahu-border
-                       rounded-lg text-sm text-white hover:border-kahu-accent/40 transition-colors"
-          >
-            <Download size={14} />
-            Linux / macOS
-          </a>
-        </div>
-      </div>
 
       {/* Active sources */}
       <h2 className="text-sm font-medium text-slate-400 mb-3">Active Sources</h2>
@@ -425,7 +439,6 @@ function SourceDetailModal({
   onDeleted: () => void;
 }) {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const isWazuh = source.connector_type === "wazuh_agent";
 
   const testMut = useMutation({
     mutationFn: () => testConnectorSource(source.id),
@@ -503,8 +516,7 @@ function SourceDetailModal({
         )}
 
         {/* Actions */}
-        {!isWazuh && (
-          <div className="flex flex-wrap gap-2 pt-2">
+        <div className="flex flex-wrap gap-2 pt-2">
             <button
               onClick={() => testMut.mutate()}
               disabled={testMut.isPending}
@@ -551,13 +563,6 @@ function SourceDetailModal({
               </div>
             )}
           </div>
-        )}
-
-        {isWazuh && (
-          <p className="text-xs text-slate-500 italic">
-            Wazuh agents are managed through the Wazuh Manager. Use the agent deployment guide to add or remove agents.
-          </p>
-        )}
       </div>
     </ModalShell>
   );

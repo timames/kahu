@@ -7,6 +7,7 @@ from kahu.api.briefing import router as briefing_router
 from kahu.api.compliance import router as compliance_router
 from kahu.api.connectors import router as connectors_router
 from kahu.api.deps import get_current_user
+from kahu.api.devices import router as devices_router
 from kahu.api.health import router as health_router
 from kahu.api.ingest import router as ingest_router
 from kahu.api.investigation import router as investigation_router
@@ -50,6 +51,7 @@ router.include_router(mobile_router, prefix="/m", tags=["mobile"], dependencies=
 router.include_router(
     connectors_router, prefix="/connectors", tags=["connectors"], dependencies=_auth
 )
+router.include_router(devices_router, prefix="/devices", tags=["devices"], dependencies=_auth)
 router.include_router(vulns_router, prefix="/vulns", tags=["vulnerabilities"], dependencies=_auth)
 router.include_router(recon_router, prefix="/recon", tags=["recon"], dependencies=_auth)
 router.include_router(arsenal_router, prefix="/arsenal", tags=["arsenal"], dependencies=_auth)
