@@ -41,7 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/ask-ai", icon: MessageSquare, label: "Ask AI" },
   { to: "/reports", icon: FileText, label: "Reports" },
   { to: "/compliance", icon: ShieldCheck, label: "Compliance" },
-  { to: "/connectors", icon: Cable, label: "Connectors" },
+  { to: "/connectors", icon: Cable, label: "Connectors & Endpoints" },
 ];
 
 const GRC_ITEM: NavItem = { to: "/grc", icon: ClipboardCheck, label: "GRC" };

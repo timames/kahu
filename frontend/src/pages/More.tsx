@@ -19,7 +19,7 @@ const ITEMS = [
   { to: "/ask-ai", icon: MessageSquare, label: "Ask AI", desc: "AI investigation chat" },
   { to: "/reports", icon: FileText, label: "Reports", desc: "Generated reports" },
   { to: "/compliance", icon: ShieldCheck, label: "Compliance", desc: "Framework coverage" },
-  { to: "/connectors", icon: Cable, label: "Connectors", desc: "Data sources" },
+  { to: "/connectors", icon: Cable, label: "Connectors & Endpoints", desc: "Data sources & devices" },
   { to: "/recon", icon: Radar, label: "Recon", desc: "Discovery & vuln scanning" },
   { to: "/arsenal", icon: Swords, label: "Arsenal", desc: "Offensive tools" },
 ];

@@ -54,7 +54,7 @@ export function Connectors() {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-xl font-semibold text-white">Connectors</h1>
+        <h1 className="text-xl font-semibold text-white">Connectors &amp; Endpoints</h1>
       </div>
 
       {/* Tab bar */}
