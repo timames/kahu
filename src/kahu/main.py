@@ -16,6 +16,19 @@ from kahu.services.pono import run_pono_loop
 from kahu.services.triage.poller import run_poller
 from kahu.services.triage.reeval import start_reeval_loop, stop_reeval_loop
 
+# Uvicorn only configures its own loggers ("uvicorn", "uvicorn.error",
+# "uvicorn.access") and never the root logger, so without this every
+# logger.info() in the app — poller stats, reeval cycles, alert persistence —
+# is silently dropped (root defaults to WARNING with no handler; WARNING+ only
+# leaked out via logging.lastResort as bare stderr lines). Background loops
+# swallow exceptions and log, so these lines are the only health signal they
+# have. Uvicorn's loggers keep their own handlers (propagate=False), so this
+# does not double-print access logs.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
