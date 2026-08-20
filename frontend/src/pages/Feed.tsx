@@ -7,10 +7,14 @@ import {
   getLogStorage,
   getSwipeFeed,
   getTriageStatus,
+  getMutes,
+  muteRule,
+  unmuteRule,
   disposeAlert,
   swipeAlert,
   type SwipeCard,
   type LogStorage,
+  type MutedRule,
 } from "@/api/client";
 import { severityClass, timeAgo } from "@/lib/severity";
 import {
@@ -24,6 +28,9 @@ import {
   Search,
   HardDrive,
   AlertTriangle,
+  BellOff,
+  Server,
+  X,
 } from "lucide-react";
 
 const SEV_RANK: Record<string, number> = {
@@ -59,6 +66,7 @@ interface Row {
   llm_explanation: string | null;
   verdict: string | null; // null = still pending / undispositioned
   degraded: boolean;
+  muted?: boolean; // persisted under an active rule mute (history view only)
   isLog?: boolean; // raw Wazuh indexer log — read-only, no disposition
   fullLog?: string | null;
   srcIp?: string | null;
@@ -134,6 +142,11 @@ function ListFeed() {
   const [sort, setSort] = useState<"severity" | "newest" | "oldest">("severity");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [logsOffset, setLogsOffset] = useState(0);
+  const [groupByDevice, setGroupByDevice] = useState(false);
+  const [muteTarget, setMuteTarget] = useState<{ ruleId: string; description: string } | null>(
+    null,
+  );
+  const [showMutes, setShowMutes] = useState(false);
   const LOGS_PAGE = 100;
 
   const clearSelection = () => setSelected(new Set());
@@ -173,6 +186,37 @@ function ListFeed() {
     queryFn: getLogStorage,
     enabled: view === "logs",
     staleTime: 60_000,
+  });
+
+  const mutesQuery = useQuery({
+    queryKey: ["mutes"],
+    queryFn: getMutes,
+    staleTime: 30_000,
+  });
+  const mutes = mutesQuery.data?.mutes ?? [];
+
+  const muteMut = useMutation({
+    mutationFn: ({
+      ruleId,
+      reason,
+      duration,
+    }: {
+      ruleId: string;
+      reason?: string;
+      duration?: "24h" | "7d" | null;
+    }) => muteRule(ruleId, reason, duration),
+    onSuccess: () => {
+      setMuteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["mutes"] });
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
+    },
+  });
+
+  const unmuteMut = useMutation({
+    mutationFn: (muteId: string) => unmuteRule(muteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mutes"] });
+    },
   });
 
   const isLoading =
@@ -238,6 +282,7 @@ function ListFeed() {
         llm_explanation: h.llm_explanation,
         verdict: h.verdict,
         degraded: false,
+        muted: h.muted,
       }));
     } else {
       base = (logsQuery.data?.logs ?? []).map((l) => ({
@@ -389,6 +434,24 @@ function ListFeed() {
             className="w-full pl-8 pr-2.5 py-1.5 rounded-lg text-xs bg-kahu-elevated border border-kahu-border text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-kahu-accent"
           />
         </div>
+
+        <button
+          onClick={() => setGroupByDevice(!groupByDevice)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            groupByDevice
+              ? "bg-kahu-accent text-white"
+              : "bg-kahu-elevated border border-kahu-border text-slate-400 hover:text-white"
+          }`}
+        >
+          <Server size={14} /> By device
+        </button>
+
+        <button
+          onClick={() => setShowMutes(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-kahu-elevated border border-kahu-border text-slate-400 hover:text-white transition-colors"
+        >
+          <BellOff size={14} /> Muted rules ({mutes.length})
+        </button>
       </div>
 
       {/* Storage / retention summary (All logs view only) */}
@@ -458,19 +521,41 @@ function ListFeed() {
         </div>
       ) : (
         <>
-          <div className="flex flex-col gap-3">
-            {rows.map((row) => (
-              <AlertCard
-                key={row.id}
-                row={row}
-                selectable={!row.isLog && row.verdict === null}
-                selected={selected.has(row.id)}
-                onToggleSelect={() => toggle(row.id)}
-                onDispose={(v) => dispose.mutate({ id: row.id, verdict: v })}
-                disposing={dispose.isPending}
-              />
-            ))}
-          </div>
+          {groupByDevice ? (
+            <div className="flex flex-col gap-3">
+              {groupRowsByDevice(rows).map(([device, deviceRows]) => (
+                <DeviceGroup key={device} device={device} rows={deviceRows}>
+                  {deviceRows.map((row) => (
+                    <AlertCard
+                      key={row.id}
+                      row={row}
+                      selectable={!row.isLog && row.verdict === null}
+                      selected={selected.has(row.id)}
+                      onToggleSelect={() => toggle(row.id)}
+                      onDispose={(v) => dispose.mutate({ id: row.id, verdict: v })}
+                      disposing={dispose.isPending}
+                      onMute={(ruleId, description) => setMuteTarget({ ruleId, description })}
+                    />
+                  ))}
+                </DeviceGroup>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {rows.map((row) => (
+                <AlertCard
+                  key={row.id}
+                  row={row}
+                  selectable={!row.isLog && row.verdict === null}
+                  selected={selected.has(row.id)}
+                  onToggleSelect={() => toggle(row.id)}
+                  onDispose={(v) => dispose.mutate({ id: row.id, verdict: v })}
+                  disposing={dispose.isPending}
+                  onMute={(ruleId, description) => setMuteTarget({ ruleId, description })}
+                />
+              ))}
+            </div>
+          )}
 
           {view === "logs" && (
             <div className="flex items-center justify-between mt-4 text-xs text-slate-400">
@@ -499,7 +584,248 @@ function ListFeed() {
           )}
         </>
       )}
+
+      {muteTarget && (
+        <MuteModal
+          target={muteTarget}
+          onClose={() => setMuteTarget(null)}
+          onMute={(reason, duration) =>
+            muteMut.mutate({ ruleId: muteTarget.ruleId, reason, duration })
+          }
+          pending={muteMut.isPending}
+          error={muteMut.isError ? String(muteMut.error) : null}
+        />
+      )}
+
+      {showMutes && (
+        <MutedRulesModal
+          mutes={mutes}
+          onClose={() => setShowMutes(false)}
+          onUnmute={(id) => unmuteMut.mutate(id)}
+          pending={unmuteMut.isPending}
+        />
+      )}
     </div>
+  );
+}
+
+/* ── Device grouping ── */
+
+function groupRowsByDevice(rows: Row[]): [string, Row[]][] {
+  const groups = new Map<string, Row[]>();
+  for (const row of rows) {
+    const key = row.agent_name || "Unknown device";
+    const list = groups.get(key);
+    if (list) list.push(row);
+    else groups.set(key, [row]);
+  }
+  // Order groups by their worst severity, then by size.
+  return [...groups.entries()].sort(([, a], [, b]) => {
+    const worst = (rs: Row[]) => Math.min(...rs.map((r) => SEV_RANK[r.severity] ?? 9));
+    return worst(a) - worst(b) || b.length - a.length;
+  });
+}
+
+function DeviceGroup({
+  device,
+  rows,
+  children,
+}: {
+  device: string;
+  rows: Row[];
+  children: React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const worst = rows.reduce(
+    (acc, r) => ((SEV_RANK[r.severity] ?? 9) < (SEV_RANK[acc] ?? 9) ? r.severity : acc),
+    rows[0]?.severity ?? "info",
+  );
+
+  return (
+    <div className="bg-kahu-card border border-kahu-border rounded-xl overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-3 p-4 text-left hover:bg-white/[0.02] transition-colors"
+      >
+        <Server size={16} className="text-kahu-accent shrink-0" />
+        <span className="flex-1 min-w-0 text-sm font-medium text-white truncate">{device}</span>
+        <span className={`severity-chip ${severityClass(worst)}`}>{worst}</span>
+        <span className="text-xs text-slate-500">
+          {rows.length} alert{rows.length === 1 ? "" : "s"}
+        </span>
+        {expanded ? (
+          <ChevronUp size={16} className="text-slate-500" />
+        ) : (
+          <ChevronDown size={16} className="text-slate-500" />
+        )}
+      </button>
+      {expanded && (
+        <div className="flex flex-col gap-3 px-3 pb-3 border-t border-kahu-border pt-3">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Mute modals ── */
+
+function FeedModalShell({
+  onClose,
+  title,
+  children,
+}: {
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-kahu-card border border-kahu-border rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function MuteModal({
+  target,
+  onClose,
+  onMute,
+  pending,
+  error,
+}: {
+  target: { ruleId: string; description: string };
+  onClose: () => void;
+  onMute: (reason: string, duration: "24h" | "7d" | null) => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [duration, setDuration] = useState<"24h" | "7d" | null>("24h");
+  const [reason, setReason] = useState("");
+
+  const durationBtn = (value: "24h" | "7d" | null, label: string) => (
+    <button
+      onClick={() => setDuration(value)}
+      className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+        duration === value
+          ? "bg-kahu-accent text-white"
+          : "bg-kahu-elevated border border-kahu-border text-slate-400 hover:text-white"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <FeedModalShell onClose={onClose} title={`Mute rule ${target.ruleId}`}>
+      <p className="text-sm text-slate-300 mb-1">{target.description}</p>
+      <p className="text-xs text-slate-500 mb-4">
+        New alerts from this rule are still recorded for audit, but skip AI triage and stay out of
+        the pending queue. Alerts already in the queue remain until dispositioned. High and
+        critical alerts are never muted.
+      </p>
+
+      <div className="text-xs text-slate-500 mb-1 font-medium">Duration</div>
+      <div className="flex gap-2 mb-4">
+        {durationBtn("24h", "24 hours")}
+        {durationBtn("7d", "7 days")}
+        {durationBtn(null, "Forever")}
+      </div>
+
+      <div className="text-xs text-slate-500 mb-1 font-medium">Reason (optional)</div>
+      <input
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Why is this rule noise?"
+        className="w-full px-3 py-2 rounded-lg text-sm bg-kahu-elevated border border-kahu-border text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-kahu-accent mb-4"
+      />
+
+      {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => onMute(reason, duration)}
+          disabled={pending}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-kahu-accent text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+        >
+          <BellOff size={14} /> Mute rule
+        </button>
+      </div>
+    </FeedModalShell>
+  );
+}
+
+function muteExpiry(expiresAt: string | null): string {
+  if (!expiresAt) return "forever";
+  const ms = +new Date(expiresAt) - Date.now();
+  if (ms <= 0) return "expired";
+  const hours = ms / 3_600_000;
+  if (hours < 1) return `${Math.max(1, Math.round(ms / 60_000))}m left`;
+  if (hours < 48) return `${Math.round(hours)}h left`;
+  return `${Math.round(hours / 24)}d left`;
+}
+
+function MutedRulesModal({
+  mutes,
+  onClose,
+  onUnmute,
+  pending,
+}: {
+  mutes: MutedRule[];
+  onClose: () => void;
+  onUnmute: (muteId: string) => void;
+  pending: boolean;
+}) {
+  return (
+    <FeedModalShell onClose={onClose} title={`Muted rules (${mutes.length})`}>
+      {mutes.length === 0 ? (
+        <p className="text-sm text-slate-400">No rules are muted.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {mutes.map((m) => (
+            <div
+              key={m.id}
+              className="flex items-start gap-3 p-3 rounded-lg bg-kahu-elevated border border-kahu-border"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-white">Rule {m.rule_id}</span>
+                  <span className="text-[11px] text-slate-500">{muteExpiry(m.expires_at)}</span>
+                </div>
+                {m.rule_description && (
+                  <p className="text-xs text-slate-400 mt-0.5 truncate">{m.rule_description}</p>
+                )}
+                {m.reason && <p className="text-xs text-slate-500 mt-0.5">“{m.reason}”</p>}
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  by {m.created_by} · {timeAgo(m.created_at)}
+                </p>
+              </div>
+              <button
+                onClick={() => onUnmute(m.id)}
+                disabled={pending}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-500/10 text-slate-300 hover:bg-slate-500/20 transition-colors disabled:opacity-50 shrink-0"
+              >
+                Unmute
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </FeedModalShell>
   );
 }
 
@@ -625,6 +951,7 @@ function AlertCard({
   onToggleSelect,
   onDispose,
   disposing,
+  onMute,
 }: {
   row: Row;
   selectable: boolean;
@@ -632,6 +959,7 @@ function AlertCard({
   onToggleSelect: () => void;
   onDispose: (verdict: string) => void;
   disposing: boolean;
+  onMute?: (ruleId: string, description: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -667,6 +995,11 @@ function AlertCard({
                   }`}
                 >
                   {VERDICT_LABEL[row.verdict] ?? row.verdict}
+                </span>
+              )}
+              {row.muted && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide text-slate-400 bg-slate-500/10">
+                  <BellOff size={10} /> Muted
                 </span>
               )}
             </div>
@@ -743,6 +1076,15 @@ function AlertCard({
               >
                 <ArrowUpCircle size={14} /> Escalate
               </button>
+              {onMute && (
+                <button
+                  onClick={() => onMute(row.rule_id, row.rule_description)}
+                  disabled={disposing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 transition-colors disabled:opacity-50"
+                >
+                  <BellOff size={14} /> Mute rule
+                </button>
+              )}
             </div>
           ) : (
             <div className="text-xs text-slate-500">

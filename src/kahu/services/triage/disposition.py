@@ -81,6 +81,7 @@ async def persist_alert(
         llm_triage=result.llm_output,
         pipeline_provenance=result.provenance,
         control_tags=alert_control_tags,
+        muted=result.muted,
     )
 
     session.add(alert)

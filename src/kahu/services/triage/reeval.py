@@ -125,6 +125,9 @@ async def run_reeval_cycle() -> dict:
                     ]
                 )
             )
+            # Muted alerts never re-enter LLM triage — the mute exists to stop
+            # exactly that inference cost.
+            .where(Alert.muted == False)  # noqa: E712 — SQL expression
             # Only re-evaluate if last check was > 1 hour ago
             .where(
                 AlertDisposition.updated_at

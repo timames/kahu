@@ -101,6 +101,18 @@ export const disposeAlert = (alertId: string, verdict: string, notes = "") =>
 
 export const getTriageStatus = () => request<TriageStatus>("/triage/status");
 
+// ── Rule mutes ──
+export const getMutes = () => request<{ mutes: MutedRule[] }>("/triage/mutes");
+
+export const muteRule = (ruleId: string, reason?: string, duration?: "24h" | "7d" | null) =>
+  request<MutedRule>("/triage/mutes", {
+    method: "POST",
+    body: JSON.stringify({ rule_id: ruleId, reason: reason || null, duration: duration || null }),
+  });
+
+export const unmuteRule = (muteId: string) =>
+  request(`/triage/mutes/${muteId}`, { method: "DELETE" });
+
 // ── Swipe Feed ──
 export const getSwipeFeed = (limit = 10) =>
   request<SwipeFeedResponse>(`/m/feed?limit=${limit}`);
@@ -252,6 +264,17 @@ export interface HistoryAlert {
   analyst: string | null;
   disposition_at: string | null;
   llm_explanation: string | null;
+  muted: boolean;
+}
+
+export interface MutedRule {
+  id: string;
+  rule_id: string;
+  reason: string | null;
+  created_by: string;
+  expires_at: string | null;
+  created_at: string;
+  rule_description: string | null;
 }
 
 export interface WazuhLog {

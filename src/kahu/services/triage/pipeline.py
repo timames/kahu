@@ -14,11 +14,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.clients.ollama import OllamaClient
 from kahu.clients.wazuh import WazuhIndexerClient
+from kahu.models.alerts import MutedRule
 from kahu.services.triage.auto_disposition import maybe_auto_dispose
 from kahu.services.triage.disposition import persist_alert
 from kahu.services.triage.enrichment import enrich_alert_group
@@ -41,6 +44,7 @@ class PipelineResult:
     provenance: dict | None = None
     alert_id: str | None = None
     degraded: bool = False
+    muted: bool = False
 
 
 @dataclass
@@ -49,10 +53,21 @@ class PipelineStats:
 
     total: int = 0
     filtered: int = 0
+    muted: int = 0
     triaged: int = 0
     persisted: int = 0
     auto_disposed: int = 0
     errors: int = 0
+
+
+async def get_active_muted_rule_ids(session: AsyncSession) -> set[str]:
+    """Rule IDs with an active, unexpired user mute. Fetched once per batch."""
+    now = datetime.now(UTC)
+    stmt = select(MutedRule.rule_id).where(
+        MutedRule.active == True,  # noqa: E712 — SQLAlchemy expression, not identity
+        or_(MutedRule.expires_at.is_(None), MutedRule.expires_at > now),
+    )
+    return set((await session.execute(stmt)).scalars().all())
 
 
 async def run_pipeline(
@@ -60,6 +75,7 @@ async def run_pipeline(
     session: AsyncSession | None = None,
     indexer: WazuhIndexerClient | None = None,
     ollama: OllamaClient | None = None,
+    muted_rules: set[str] | None = None,
 ) -> PipelineResult:
     """Process a single Wazuh alert through all four triage stages."""
 
@@ -70,6 +86,39 @@ async def run_pipeline(
             passed_filter=False,
             filter_result=filtered,
         )
+
+    # User rule mute: persist a minimal row (audit trail intact) but skip
+    # enrichment, LLM triage, and auto-disposition, and hide from the queue.
+    # Guardrail — the governing invariant applies here too: a mute can NEVER
+    # silence a CRITICAL_RULE_IDS hit or a deterministically high/critical
+    # alert. Both checks read the raw deterministic FilterResult, so nothing
+    # the model (or an attacker-controlled log body) says can widen a mute.
+    rule_id = str(raw_alert.get("rule", {}).get("id", ""))
+    if (
+        muted_rules
+        and rule_id in muted_rules
+        and not filtered.critical_rule
+        and filtered.severity not in ("high", "critical")
+    ):
+        result = PipelineResult(
+            passed_filter=True,
+            filter_result=filtered,
+            final_severity=filtered.severity,
+            provenance={
+                "muted_by_rule": rule_id,
+                "stages": ["filters", "muted"],
+                "deterministic_severity": filtered.severity,
+                "final_severity": filtered.severity,
+            },
+            muted=True,
+        )
+        if session is not None:
+            try:
+                alert = await persist_alert(result, raw_alert, session)
+                result.alert_id = str(alert.id)
+            except Exception:
+                logger.error("Failed to persist muted alert", exc_info=True)
+        return result
 
     # Stage 2: Enrichment
     enriched = await enrich_alert_group(
@@ -151,6 +200,13 @@ async def run_pipeline_batch(
     stats = PipelineStats(total=len(raw_alerts))
     results: list[PipelineResult] = []
 
+    muted_rules: set[str] = set()
+    if session is not None:
+        try:
+            muted_rules = await get_active_muted_rule_ids(session)
+        except Exception:
+            logger.warning("Failed to load muted rules — proceeding unmuted", exc_info=True)
+
     for raw_alert in raw_alerts:
         try:
             result = await run_pipeline(
@@ -158,11 +214,16 @@ async def run_pipeline_batch(
                 session=session,
                 indexer=indexer,
                 ollama=ollama,
+                muted_rules=muted_rules,
             )
             results.append(result)
 
             if not result.passed_filter:
                 stats.filtered += 1
+            elif result.muted:
+                stats.muted += 1
+                if result.alert_id:
+                    stats.persisted += 1
             else:
                 stats.triaged += 1
                 if result.alert_id:

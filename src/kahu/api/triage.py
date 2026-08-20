@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from kahu.api.deps import get_current_user
 from kahu.clients.ollama import OllamaClient
 from kahu.clients.wazuh import WazuhAPIClient, WazuhIndexerClient
 from kahu.db import get_session
-from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
+from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, MutedRule, Severity
+from kahu.models.users import User
 from kahu.schemas.triage import (
     AlertDetail,
     AlertSummary,
@@ -22,12 +24,18 @@ from kahu.schemas.triage import (
     HistoryAlertSummary,
     HistoryResponse,
     LogStorageResponse,
+    MuteCreate,
+    MutedRuleOut,
+    MutesResponse,
     PipelineStatusResponse,
     TriageQueueResponse,
     WazuhLog,
     WazuhLogsResponse,
 )
+from kahu.services.compliance.evidence import record_evidence
+from kahu.services.triage.auto_disposition import TOLERANCE_CHANGE_CONTROLS
 from kahu.services.triage.disposition import record_disposition
+from kahu.services.triage.filters import CRITICAL_RULE_IDS
 
 router = APIRouter()
 
@@ -41,7 +49,8 @@ async def get_triage_queue(
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> TriageQueueResponse:
     """Get the alert triage queue, ordered by severity and recency."""
-    stmt = select(Alert).options(selectinload(Alert.disposition))
+    # Muted alerts are persisted for audit but never surface in the queue.
+    stmt = select(Alert).options(selectinload(Alert.disposition)).where(Alert.muted == False)  # noqa: E712
 
     if severity:
         stmt = stmt.where(Alert.severity == Severity(severity))
@@ -128,10 +137,150 @@ async def alert_history(
                 analyst=a.disposition.analyst if a.disposition else None,
                 disposition_at=a.disposition.created_at if a.disposition else None,
                 llm_explanation=llm.get("explanation"),
+                muted=a.muted,
             )
         )
 
     return HistoryResponse(alerts=items, total=total, offset=offset, limit=limit)
+
+
+# ── Rule mutes ────────────────────────────────────────────
+
+
+def _active_mute_clause():
+    now = datetime.now(UTC)
+    return (
+        MutedRule.active == True,  # noqa: E712 — SQL expression
+        or_(MutedRule.expires_at.is_(None), MutedRule.expires_at > now),
+    )
+
+
+@router.get("/mutes", response_model=MutesResponse)
+async def list_mutes(
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> MutesResponse:
+    """List active (unexpired) rule mutes with a sample rule description."""
+    stmt = select(MutedRule).where(*_active_mute_clause()).order_by(MutedRule.created_at.desc())
+    mutes = (await session.execute(stmt)).scalars().all()
+
+    # Most recent alert description per muted rule so the UI can label them.
+    descriptions: dict[str, str] = {}
+    for rule_id in {m.rule_id for m in mutes}:
+        desc = await session.scalar(
+            select(Alert.rule_description)
+            .where(Alert.rule_id == rule_id)
+            .order_by(Alert.created_at.desc())
+            .limit(1)
+        )
+        if desc:
+            descriptions[rule_id] = desc
+
+    return MutesResponse(
+        mutes=[
+            MutedRuleOut(
+                id=m.id,
+                rule_id=m.rule_id,
+                reason=m.reason,
+                created_by=m.created_by,
+                expires_at=m.expires_at,
+                created_at=m.created_at,
+                rule_description=descriptions.get(m.rule_id),
+            )
+            for m in mutes
+        ]
+    )
+
+
+@router.post("/mutes", response_model=MutedRuleOut, status_code=201)
+async def create_mute(
+    body: MuteCreate,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+    user: User = Depends(get_current_user),  # noqa: B008
+) -> MutedRuleOut:
+    """Mute a rule: its alerts are persisted but skip LLM triage and the queue.
+
+    Guardrail — the governing invariant: rules in CRITICAL_RULE_IDS can never
+    be muted, and (enforced in the pipeline) no mute applies to alerts whose
+    deterministic severity is high/critical. Muting is a suppression-posture
+    change, so it is recorded in the hash-chained evidence store with the
+    actor who made it.
+    """
+    if body.rule_id in CRITICAL_RULE_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Rule {body.rule_id} is a critical rule and can never be muted",
+        )
+
+    # Idempotency: refuse a duplicate active mute for the same rule.
+    existing = await session.scalar(
+        select(MutedRule).where(MutedRule.rule_id == body.rule_id, *_active_mute_clause())
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail=f"Rule {body.rule_id} is already muted")
+
+    expires_at = None
+    if body.duration == "24h":
+        expires_at = datetime.now(UTC) + timedelta(hours=24)
+    elif body.duration == "7d":
+        expires_at = datetime.now(UTC) + timedelta(days=7)
+
+    mute = MutedRule(
+        id=uuid.uuid4(),
+        rule_id=body.rule_id,
+        reason=body.reason,
+        created_by=user.email,
+        expires_at=expires_at,
+        active=True,
+    )
+    session.add(mute)
+    await session.flush()
+
+    await record_evidence(
+        session,
+        event_type="rule_muted",
+        control_tags=TOLERANCE_CHANGE_CONTROLS,
+        payload={
+            "mute_id": str(mute.id),
+            "rule_id": mute.rule_id,
+            "reason": mute.reason,
+            "expires_at": expires_at.isoformat() if expires_at else None,
+            "duration": body.duration or "forever",
+        },
+        actor=user.email,
+    )
+    await session.commit()
+
+    return MutedRuleOut(
+        id=mute.id,
+        rule_id=mute.rule_id,
+        reason=mute.reason,
+        created_by=mute.created_by,
+        expires_at=mute.expires_at,
+        created_at=mute.created_at,
+    )
+
+
+@router.delete("/mutes/{mute_id}")
+async def delete_mute(
+    mute_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+    user: User = Depends(get_current_user),  # noqa: B008
+) -> dict:
+    """Unmute: deactivate the mute (audit row is kept) and record evidence."""
+    mute = await session.get(MutedRule, mute_id)
+    if mute is None:
+        raise HTTPException(status_code=404, detail="Mute not found")
+
+    mute.active = False
+    await record_evidence(
+        session,
+        event_type="rule_unmuted",
+        control_tags=TOLERANCE_CHANGE_CONTROLS,
+        payload={"mute_id": str(mute.id), "rule_id": mute.rule_id},
+        actor=user.email,
+    )
+    await session.commit()
+    return {"status": "ok", "rule_id": mute.rule_id}
 
 
 # Wazuh rule.level → Kahu severity band. These bounds mirror the mapping the

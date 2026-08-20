@@ -68,6 +68,7 @@ class HistoryAlertSummary(BaseModel):
     analyst: str | None = None
     disposition_at: datetime | None = None
     llm_explanation: str | None = None
+    muted: bool = False
 
 
 class TriageQueueResponse(BaseModel):
@@ -119,6 +120,29 @@ class LogStorageResponse(BaseModel):
     retention_days_current: float
     days_until_full: float
     total_capacity_days: float
+
+
+class MuteCreate(BaseModel):
+    rule_id: str = Field(..., min_length=1, max_length=50)
+    reason: str | None = Field(None, max_length=2000)
+    # "24h" | "7d" | None (forever)
+    duration: str | None = Field(None, pattern="^(24h|7d)$")
+
+
+class MutedRuleOut(BaseModel):
+    id: uuid.UUID
+    rule_id: str
+    reason: str | None
+    created_by: str
+    expires_at: datetime | None
+    created_at: datetime
+    # Most recent alert description for this rule — helps the user recognise
+    # what they muted.
+    rule_description: str | None = None
+
+
+class MutesResponse(BaseModel):
+    mutes: list[MutedRuleOut]
 
 
 class PipelineBatchRequest(BaseModel):
