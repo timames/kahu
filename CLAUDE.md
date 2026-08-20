@@ -90,7 +90,7 @@ The second check reads `FilterResult.severity` (the raw deterministic value), **
 
 When touching triage, preserve both. `tests/test_auto_disposition_floor.py` is the regression suite for the second one.
 
-**Known wart:** the LLM prompt asks for `recommended_verdict: "acknowledge"`, and `_parse_llm_response` validates against that spelling, but `maybe_auto_dispose` compares against `"acknowledged"`. An explicit model recommendation therefore never triggers auto-dismissal — only `_infer_verdict`'s inferred `"acknowledged"` does. Fail-safe in direction, but be aware before "fixing" either spelling.
+**Verdict vocabulary:** the canonical spelling is `DispositionVerdict`'s — `"acknowledged"`, not `"acknowledge"`. `canonical_verdict()` in `llm_triage.py` folds the legacy `"acknowledge"`/`"false_positive"` variants to it at the parse boundary, and `maybe_auto_dispose` re-normalizes defensively so hand-built `llm_output` can't silently disable the comparison. Explicit model recommendations DO flow into auto-dismissal now (still floor-bounded); keep any new verdict comparison keyed on the canonical value via `canonical_verdict()`.
 
 **Evidence store** (`services/compliance/evidence.py`): append-only, SHA-256 hash-chained. Any subsystem calls `record_evidence(session, event_type=..., control_tags=[...], payload=..., actor=...)`; **the caller owns the commit**. `verify_chain()` walks it. Security-relevant configuration changes belong here too, not just operational events — see `set_tolerance_audited()` for the pattern (mutate, record with attribution, commit).
 
