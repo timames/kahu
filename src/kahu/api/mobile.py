@@ -14,9 +14,10 @@ from sqlalchemy.orm import selectinload
 from kahu.api.deps import get_current_user
 from kahu.db import get_session
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
-from kahu.models.tickets import Ticket, TicketStatus, TicketType
+from kahu.models.tickets import Ticket, TicketStatus
 from kahu.models.users import User
 from kahu.models.xp import XpEvent
+from kahu.services.tickets import ensure_ticket_for_verdict
 from kahu.services.triage.auto_disposition import (
     get_tolerance,
     maybe_auto_dispose,
@@ -288,28 +289,8 @@ async def swipe(
     xp = XpEvent(analyst=body.analyst, points=1, reason="alert_triage", ref_id=alert_id)
     session.add(xp)
 
-    # If true positive or escalated, create a ticket
-    ticket_id = None
-    ttype = None
-    if verdict in (DispositionVerdict.TRUE_POSITIVE, DispositionVerdict.UNDETERMINED):
-        ttype = (
-            TicketType.INCIDENT
-            if verdict == DispositionVerdict.TRUE_POSITIVE
-            else TicketType.INVESTIGATION
-        )
-        ticket = Ticket(
-            alert_id=alert_id,
-            title=alert.rule_description or f"Rule {alert.rule_id}",
-            severity=alert.severity.value
-            if isinstance(alert.severity, Severity)
-            else alert.severity,
-            ticket_type=ttype.value,
-            status=TicketStatus.OPEN,
-            assigned_to=body.analyst,
-        )
-        session.add(ticket)
-        await session.flush()
-        ticket_id = ticket.id
+    # If true positive or escalated, open the follow-up ticket (idempotent).
+    ticket = await ensure_ticket_for_verdict(session, alert, verdict, body.analyst)
 
     await session.commit()
 
@@ -318,8 +299,8 @@ async def swipe(
         verdict=verdict.value,
         message=message_map[body.direction],
         xp_earned=1,
-        ticket_id=ticket_id,
-        ticket_type=ttype.value if ttype else None,
+        ticket_id=ticket.id if ticket else None,
+        ticket_type=ticket.ticket_type if ticket else None,
     )
 
 

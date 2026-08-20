@@ -204,7 +204,41 @@ export const getVulnResults = (taskId: string) => request(`/vulns/results/${task
 
 // ── Score ──
 export const getScore = () => request<ScoreData>("/m/score");
-export const getTickets = () => request<{ tickets: Ticket[] }>("/m/tickets");
+
+// ── Cases (investigations / incidents) ──
+export const getCaseTickets = (
+  opts: { ticket_type?: string; status?: string; offset?: number; limit?: number } = {},
+) => {
+  const p = new URLSearchParams();
+  if (opts.ticket_type) p.set("ticket_type", opts.ticket_type);
+  if (opts.status) p.set("status", opts.status);
+  if (opts.offset !== undefined) p.set("offset", String(opts.offset));
+  if (opts.limit !== undefined) p.set("limit", String(opts.limit));
+  return request<CaseListResponse>(`/tickets?${p}`);
+};
+
+export const getTicketCounts = () => request<TicketCounts>("/tickets/counts");
+
+export const getTicketDetail = (ticketId: string) =>
+  request<CaseTicketDetail>(`/tickets/${ticketId}`);
+
+export const promoteTicket = (ticketId: string) =>
+  request<CaseTicket>(`/tickets/${ticketId}/promote`, { method: "POST" });
+
+export const closeCaseTicket = (ticketId: string, verdict: string, resolutionNotes: string) =>
+  request<CaseTicket>(`/tickets/${ticketId}/close`, {
+    method: "POST",
+    body: JSON.stringify({ verdict, resolution_notes: resolutionNotes }),
+  });
+
+export const updateCaseTicket = (
+  ticketId: string,
+  body: { title?: string; status?: string; assigned_to?: string },
+) =>
+  request<CaseTicket>(`/tickets/${ticketId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 
 // ── Pono Score ──
 export const getPonoScore = () => request<PonoSnapshot | null>("/pono/current");
@@ -523,13 +557,43 @@ export interface ScoreData {
   badges: string[];
 }
 
-export interface Ticket {
+export interface CaseTicket {
   id: string;
+  alert_id: string;
   title: string;
   severity: string;
+  ticket_type: string;
   status: string;
+  assigned_to: string;
+  closed_by: string | null;
+  resolution_notes: string | null;
+  promoted_at: string | null;
+  promoted_by: string | null;
   created_at: string;
-  alert_id: string;
+  updated_at: string;
+  alert_rule_id: string | null;
+  alert_rule_description: string | null;
+  alert_agent_name: string | null;
+  alert_created_at: string | null;
+  alert_llm_explanation: string | null;
+  alert_degraded: boolean;
+}
+
+export interface CaseTicketDetail extends CaseTicket {
+  alert_recommended_actions: string[];
+  alert_enrichment: Record<string, unknown> | null;
+}
+
+export interface CaseListResponse {
+  tickets: CaseTicket[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface TicketCounts {
+  investigations_open: number;
+  incidents_open: number;
 }
 
 export interface PonoComponent {

@@ -1,6 +1,8 @@
 import { NavLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
+  MessageSquare,
+  FileText,
   ShieldCheck,
   ClipboardCheck,
   Cable,
@@ -14,6 +16,8 @@ import { getProfiles } from "@/api/client";
 import { useSettings } from "@/hooks/useSettings";
 
 const ITEMS = [
+  { to: "/ask-ai", icon: MessageSquare, label: "Ask AI", desc: "AI investigation chat" },
+  { to: "/reports", icon: FileText, label: "Reports", desc: "Generated reports" },
   { to: "/compliance", icon: ShieldCheck, label: "Compliance", desc: "Framework coverage" },
   { to: "/connectors", icon: Cable, label: "Connectors", desc: "Data sources" },
   { to: "/recon", icon: Radar, label: "Recon", desc: "Discovery & vuln scanning" },
@@ -29,7 +33,7 @@ export function More() {
   const { data: profiles } = useQuery({ queryKey: ["profiles"], queryFn: getProfiles });
 
   const items = [...ITEMS];
-  if ((profiles?.length ?? 0) > 0) items.splice(1, 0, GRC_ITEM);
+  if ((profiles?.length ?? 0) > 0) items.splice(3, 0, GRC_ITEM);
   if (gamificationEnabled) items.push(SCORE_ITEM);
   items.push(SETTINGS_ITEM);
 

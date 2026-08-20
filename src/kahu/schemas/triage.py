@@ -54,6 +54,10 @@ class DispositionOut(BaseModel):
     analyst: str
     notes: str | None
     created_at: datetime
+    # Set when the verdict opened a follow-up case (escalate → investigation,
+    # confirm → incident) so the UI can point at the destination.
+    ticket_id: uuid.UUID | None = None
+    ticket_type: str | None = None
 
 
 class HistoryAlertSummary(BaseModel):

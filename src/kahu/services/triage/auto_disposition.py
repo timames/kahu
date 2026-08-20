@@ -20,7 +20,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
-from kahu.models.tickets import Ticket, TicketStatus, TicketType
 from kahu.services.compliance.evidence import record_evidence
 from kahu.services.triage.disposition import AI_ANALYST, record_disposition
 from kahu.services.triage.llm_triage import canonical_verdict
@@ -262,16 +261,15 @@ async def maybe_auto_dispose(
             session=session,
         )
 
-        # Create ticket
-        ticket = Ticket(
-            alert_id=alert.id,
-            title=alert.rule_description or f"Rule {alert.rule_id}",
-            severity=severity,
-            ticket_type=TicketType.INCIDENT.value,
-            status=TicketStatus.OPEN,
-            assigned_to=AI_ANALYST,
+        # Open the incident ticket (idempotent — shared helper with the web
+        # and mobile confirm paths). Imported lazily: kahu.services.tickets
+        # imports from this package, so a module-level import here closes a
+        # cycle through kahu.services.triage.__init__ → pipeline → here.
+        from kahu.services.tickets import ensure_ticket_for_verdict
+
+        await ensure_ticket_for_verdict(
+            session, alert, DispositionVerdict.TRUE_POSITIVE, AI_ANALYST
         )
-        session.add(ticket)
 
         await session.commit()
         logger.info(

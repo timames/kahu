@@ -5,6 +5,8 @@ import {
   ListFilter,
   MessageSquare,
   FileText,
+  FolderSearch,
+  Siren,
   ShieldCheck,
   ClipboardCheck,
   Cable,
@@ -16,7 +18,7 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
-import { getProfiles } from "@/api/client";
+import { getProfiles, getTicketCounts } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 
@@ -24,13 +26,19 @@ interface NavItem {
   to: string;
   icon: React.ComponentType<{ size?: number }>;
   label: string;
+  badge?: number;
 }
 
+// Order matters: the mobile bottom bar shows the first 5 items only, so the
+// alert-handling loop (Glance → Feed → Investigations → Incidents) plus Score
+// stays on it; Ask AI and Reports live in More on mobile.
 const NAV_ITEMS: NavItem[] = [
   { to: "/", icon: Activity, label: "Glance" },
-  { to: "/score", icon: Trophy, label: "Score" },
   { to: "/feed", icon: ListFilter, label: "Feed" },
-  { to: "/investigate", icon: MessageSquare, label: "Investigate" },
+  { to: "/investigations", icon: FolderSearch, label: "Investigations" },
+  { to: "/incidents", icon: Siren, label: "Incidents" },
+  { to: "/score", icon: Trophy, label: "Score" },
+  { to: "/ask-ai", icon: MessageSquare, label: "Ask AI" },
   { to: "/reports", icon: FileText, label: "Reports" },
   { to: "/compliance", icon: ShieldCheck, label: "Compliance" },
   { to: "/connectors", icon: Cable, label: "Connectors" },
@@ -52,8 +60,18 @@ export function Layout() {
   const { data: profiles } = useQuery({ queryKey: ["profiles"], queryFn: getProfiles });
   const hasProfiles = (profiles?.length ?? 0) > 0;
 
+  const { data: counts } = useQuery({
+    queryKey: ["ticket-counts"],
+    queryFn: getTicketCounts,
+    refetchInterval: 30_000,
+  });
+
   const items = [
-    ...NAV_ITEMS,
+    ...NAV_ITEMS.map((item) => {
+      if (item.to === "/investigations") return { ...item, badge: counts?.investigations_open };
+      if (item.to === "/incidents") return { ...item, badge: counts?.incidents_open };
+      return item;
+    }),
     ...(hasProfiles ? [GRC_ITEM] : []),
     ...REST_ITEMS,
     SETTINGS_ITEM,
@@ -84,7 +102,12 @@ export function Layout() {
               }
             >
               <item.icon size={18} />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {(item.badge ?? 0) > 0 && (
+                <span className="min-w-5 px-1.5 py-0.5 rounded-full bg-kahu-accent/20 text-kahu-accent text-[10px] font-semibold text-center leading-none">
+                  {item.badge}
+                </span>
+              )}
             </NavLink>
           ))}
         </div>
@@ -126,7 +149,14 @@ export function Layout() {
                 }`
               }
             >
-              <item.icon size={20} />
+              <span className="relative">
+                <item.icon size={20} />
+                {(item.badge ?? 0) > 0 && (
+                  <span className="absolute -top-1.5 -right-2 min-w-4 px-1 rounded-full bg-kahu-accent text-white text-[9px] font-semibold text-center leading-4">
+                    {item.badge}
+                  </span>
+                )}
+              </span>
               {item.label}
             </NavLink>
           ))}

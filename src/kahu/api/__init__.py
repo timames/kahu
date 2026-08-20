@@ -14,6 +14,7 @@ from kahu.api.mobile import router as mobile_router
 from kahu.api.pono import router as pono_router
 from kahu.api.recon import router as recon_router
 from kahu.api.reports import router as reports_router
+from kahu.api.tickets import router as tickets_router
 from kahu.api.triage import router as triage_router
 from kahu.api.validation import router as validation_router
 from kahu.api.vulnerabilities import router as vulns_router
@@ -44,6 +45,7 @@ router.include_router(
     compliance_router, prefix="/compliance", tags=["compliance"], dependencies=_auth
 )
 router.include_router(reports_router, prefix="/reports", tags=["reports"], dependencies=_auth)
+router.include_router(tickets_router, prefix="/tickets", tags=["tickets"], dependencies=_auth)
 router.include_router(mobile_router, prefix="/m", tags=["mobile"], dependencies=_auth)
 router.include_router(
     connectors_router, prefix="/connectors", tags=["connectors"], dependencies=_auth

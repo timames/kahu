@@ -3,7 +3,9 @@ import { Layout } from "@/components/Layout";
 import { Login } from "@/pages/Login";
 import { Glance } from "@/pages/Glance";
 import { Feed } from "@/pages/Feed";
-import { Investigate } from "@/pages/Investigate";
+import { AskAI } from "@/pages/AskAI";
+import { Investigations } from "@/pages/Investigations";
+import { Incidents } from "@/pages/Incidents";
 import { Reports } from "@/pages/Reports";
 import { Compliance } from "@/pages/Compliance";
 import { GRC } from "@/pages/GRC";
@@ -34,7 +36,10 @@ export function App() {
       >
         <Route index element={<Glance />} />
         <Route path="feed" element={<Feed />} />
-        <Route path="investigate" element={<Investigate />} />
+        <Route path="investigations" element={<Investigations />} />
+        <Route path="incidents" element={<Incidents />} />
+        <Route path="ask-ai" element={<AskAI />} />
+        <Route path="investigate" element={<Navigate to="/ask-ai" replace />} />
         <Route path="reports" element={<Reports />} />
         <Route path="compliance" element={<Compliance />} />
         <Route path="grc" element={<GRC />} />

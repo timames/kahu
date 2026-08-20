@@ -2,9 +2,10 @@
 
 import enum
 import uuid
+from datetime import datetime
 
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from kahu.models.base import Base, TimestampMixin, UUIDPrimaryKey
@@ -39,5 +40,8 @@ class Ticket(Base, UUIDPrimaryKey, TimestampMixin):
     assigned_to: Mapped[str] = mapped_column(String(255))
     closed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     resolution_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Stamped when an INVESTIGATION is promoted to an INCIDENT.
+    promoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    promoted_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     alert: Mapped["Alert"] = relationship()  # noqa: F821

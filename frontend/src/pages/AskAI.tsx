@@ -10,7 +10,7 @@ interface Message {
   degraded?: boolean;
 }
 
-export function Investigate() {
+export function AskAI() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sessionId, setSessionId] = useState<string>();
@@ -49,7 +49,7 @@ export function Investigate() {
     <div className="flex flex-col h-full -m-4 md:-m-6">
       {/* Header */}
       <div className="px-4 md:px-6 py-3 border-b border-kahu-border">
-        <h1 className="text-lg font-semibold text-white">Investigation</h1>
+        <h1 className="text-lg font-semibold text-white">Ask AI</h1>
         <p className="text-xs text-slate-500">
           Ask about alerts, hosts, IPs, or threat patterns. Searches both triaged alerts and raw Wazuh logs.
         </p>

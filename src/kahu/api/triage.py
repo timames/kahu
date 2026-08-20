@@ -33,6 +33,7 @@ from kahu.schemas.triage import (
     WazuhLogsResponse,
 )
 from kahu.services.compliance.evidence import record_evidence
+from kahu.services.tickets import ensure_ticket_for_verdict
 from kahu.services.triage.auto_disposition import TOLERANCE_CHANGE_CONTROLS
 from kahu.services.triage.disposition import record_disposition
 from kahu.services.triage.filters import CRITICAL_RULE_IDS
@@ -492,11 +493,15 @@ async def disposition_alert(
     alert_id: uuid.UUID,
     body: DispositionIn,
     session: AsyncSession = Depends(get_session),  # noqa: B008
+    user: User = Depends(get_current_user),  # noqa: B008
 ) -> DispositionOut:
     """Record a human analyst's disposition of an alert.
 
     Every disposition is logged to the evidence store with full attribution —
-    this is incident-response evidence (800-171 3.6.x).
+    this is incident-response evidence (800-171 3.6.x). An escalation
+    (undetermined) opens an investigation ticket and a confirmation
+    (true_positive) opens an incident ticket, so the alert has a destination
+    once it leaves the queue.
     """
     # Verify alert exists
     alert = await session.get(Alert, alert_id)
@@ -510,13 +515,19 @@ async def disposition_alert(
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail="Alert already dispositioned")
 
+    # Attribute to the authenticated user, not the client-supplied string.
+    analyst = user.username or body.analyst
+
     disposition = await record_disposition(
         alert_id=alert_id,
         verdict=DispositionVerdict(body.verdict),
-        analyst=body.analyst,
+        analyst=analyst,
         notes=body.notes,
         session=session,
     )
+
+    ticket = await ensure_ticket_for_verdict(session, alert, disposition.verdict, analyst)
+    await session.commit()
 
     return DispositionOut(
         id=disposition.id,
@@ -525,6 +536,8 @@ async def disposition_alert(
         analyst=disposition.analyst,
         notes=disposition.notes,
         created_at=disposition.created_at,
+        ticket_id=ticket.id if ticket else None,
+        ticket_type=ticket.ticket_type if ticket else None,
     )
 
 
