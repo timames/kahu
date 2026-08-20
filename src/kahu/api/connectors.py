@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -12,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kahu.api.devices import fetch_wazuh_devices
+from kahu.clients.wazuh import WazuhIndexerClient
 from kahu.db import get_session
 from kahu.models.connectors import ConnectorInstance, ConnectorStatus
 from kahu.services.connectors.catalog import CATALOG, get_catalog, get_categories
@@ -90,7 +92,22 @@ async def list_sources(session: AsyncSession = Depends(get_session)):  # noqa: B
         select(ConnectorInstance).order_by(ConnectorInstance.created_at.desc())
     )
     instances = result.scalars().all()
-    return [_to_out(c) for c in instances]
+
+    sources = []
+    for c in instances:
+        out = _to_out(c)
+        host = _syslog_host(c)
+        if host:
+            try:
+                today, total, last = await _syslog_live_stats(host)
+                out.events_today = today
+                out.events_total = total
+                if last:
+                    out.last_event_at = last
+            except Exception:
+                logger.debug("Could not fetch syslog stats for %s", c.name, exc_info=True)
+        sources.append(out)
+    return sources
 
 
 @router.get("/overview", response_model=SourcesOverview)
@@ -101,7 +118,18 @@ async def sources_overview(session: AsyncSession = Depends(get_session)):  # noq
 
     active = sum(1 for c in instances if c.status == ConnectorStatus.ACTIVE)
     errors = sum(1 for c in instances if c.status == ConnectorStatus.ERROR)
-    events = sum(c.events_today for c in instances)
+
+    events = 0
+    for c in instances:
+        host = _syslog_host(c)
+        if host:
+            try:
+                today, _, _ = await _syslog_live_stats(host)
+                events += today
+                continue
+            except Exception:
+                logger.debug("Could not fetch syslog stats for %s", c.name, exc_info=True)
+        events += c.events_today
 
     # Wazuh agents still count toward appliance-wide totals even though they
     # are listed on the Devices tab, not as connector sources.
@@ -282,4 +310,64 @@ def _simulate_test(ct, instance) -> tuple[bool, str]:
             return False, f"Missing required field: {field.label}"
 
     return True, f"Successfully connected to {ct.name}"
+
+
+def _syslog_host(c: ConnectorInstance) -> str | None:
+    """Return the sender host key for syslog-fed connector instances.
+
+    Remote-syslog devices (UDM, pfSense, switches) don't run a Wazuh agent —
+    their events arrive via wazuh-remoted and are attributed to the manager
+    (agent 000). The only per-sender identity in the indexed document is
+    ``location`` (the sender IP as seen by remoted) and ``predecoder.hostname``
+    (whatever hostname the device writes into its syslog header). The
+    ``source_host`` config field carries either value.
+    """
+    ct = CATALOG.get(c.connector_type)
+    if not ct or ct.auth_method != "syslog":
+        return None
+    cfg = c.config or {}
+    # generic_syslog uses source_host; pfsense already carries the IP as "host"
+    host = str(cfg.get("source_host") or cfg.get("host") or "").strip()
+    return host or None
+
+
+async def _syslog_live_stats(host: str) -> tuple[int, int, datetime | None]:
+    """Live indexer counts for one remote-syslog sender.
+
+    Returns ``(events_today, events_total, last_event_at)``. Matches documents
+    whose ``location`` (sender IP) or ``predecoder.hostname`` (self-reported
+    syslog hostname) equals ``host``.
+    """
+    indexer = WazuhIndexerClient()
+    resp = await indexer.search(
+        "wazuh-alerts-*",
+        {
+            "size": 0,
+            "track_total_hits": True,
+            "query": {
+                "bool": {
+                    "should": [
+                        {"term": {"location": host}},
+                        {"term": {"predecoder.hostname": host}},
+                    ],
+                    "minimum_should_match": 1,
+                }
+            },
+            "aggs": {
+                "last_event": {"max": {"field": "timestamp"}},
+                "today": {"filter": {"range": {"timestamp": {"gte": "now/d"}}}},
+            },
+        },
+    )
+    total_raw = resp.get("hits", {}).get("total", 0)
+    total = total_raw.get("value", 0) if isinstance(total_raw, dict) else total_raw
+    aggs = resp.get("aggregations", {})
+    today = aggs.get("today", {}).get("doc_count", 0)
+
+    last: datetime | None = None
+    last_str = aggs.get("last_event", {}).get("value_as_string")
+    if last_str:
+        with contextlib.suppress(ValueError):
+            last = datetime.fromisoformat(last_str.replace("Z", "+00:00"))
+    return today, total, last
 

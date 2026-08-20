@@ -474,6 +474,15 @@ _register(
                 placeholder="lobby-switch-01",
                 help_text="A friendly name for this source",
             ),
+            ConnectorField(
+                "source_host",
+                "Sender IP / Hostname",
+                required=False,
+                placeholder="192.168.1.1",
+                help_text=(
+                    "IP or syslog hostname the device sends as — used to count its events"
+                ),
+            ),
             ConnectorField("syslog_port", "Syslog Port", placeholder="514"),
             ConnectorField(
                 "protocol", "Protocol", field_type="select", placeholder="udp,tcp,tcp+tls"
