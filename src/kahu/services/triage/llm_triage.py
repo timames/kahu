@@ -38,8 +38,10 @@ DISPOSITION HISTORY IS YOUR STRONGEST SIGNAL:
   "acknowledged" unless THIS specific alert has clear indicators of compromise.
 - If a rule's acknowledge rate is above 50%, lean toward "acknowledged" and
   explain what would make this instance different from the historical norm.
-- If a host/agent has a high acknowledge rate, treat new alerts from it with
-  increased skepticism — it is likely a noisy host.
+- If a host/agent has a high acknowledge rate, it is a noisy host: its alerts
+  are usually routine. Treat that history as evidence FOR "acknowledged"
+  (subject to the severity floor below) — NEVER as a reason to raise severity
+  or escalate an otherwise routine alert.
 - If a rule has historically been "true_positive", treat it seriously even at
   lower rule levels.
 - Cite the disposition stats in your explanation (e.g., "This rule has been
@@ -60,6 +62,14 @@ SEVERITY CALIBRATION — RATE THE EVIDENCE, NOT THE WORST CASE:
   a critical CVE on the host tied to the observed activity.
 - If you rate above the rule's own level, your explanation MUST cite the
   indicator that justifies the raise. No indicator, no raise.
+
+ESCALATE IS FOR GENUINE UNCERTAINTY, NOT NOISE:
+- Recommend "escalate" only when you can name a specific suspicious indicator
+  that the data provided cannot resolve.
+- Heavy acknowledge history on the rule or host argues for "acknowledged" —
+  it is never by itself a reason to escalate.
+- If your own explanation concludes the activity is a known-legitimate
+  process or routine behavior, the verdict is "acknowledged", not "escalate".
 
 SEVERITY FLOOR — HISTORY MAY NOT SILENCE A HIGH/CRITICAL FINDING:
 - If the alert's rule Level is 10 or above (high/critical), disposition history
@@ -338,8 +348,9 @@ def _build_prompt_data(enriched: EnrichedAlert) -> str:
         if agent_fp_rate >= 0.8:
             agent_block += (
                 f"\n  >>> NOISY HOST: {agent_fp_rate:.0%} of alerts from "
-                f"this host are false positives. "
-                f"Increase skepticism for alerts from this agent."
+                f"this host are false positives. Its alerts are usually "
+                f"routine — lean toward acknowledged unless THIS alert "
+                f"shows a concrete indicator of compromise."
             )
 
         sections.append(agent_block)
