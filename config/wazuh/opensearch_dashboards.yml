@@ -5,6 +5,10 @@ server.ssl.certificate: /usr/share/wazuh-dashboard/certs/dashboard.pem
 server.ssl.key: /usr/share/wazuh-dashboard/certs/dashboard-key.pem
 
 opensearch.hosts: ["https://wazuh-indexer:9200"]
+# Service account the dashboard uses to talk to the indexer. This file is
+# bind-mounted read-only, so the image entrypoint cannot inject these.
+opensearch.username: "kibanaserver"
+opensearch.password: "kibanaserver"
 opensearch.ssl.verificationMode: none
 opensearch.ssl.certificateAuthorities: ["/usr/share/wazuh-dashboard/certs/root-ca.pem"]
 opensearch.requestHeadersAllowlist: ["securitytenant", "Authorization"]
