@@ -22,6 +22,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Analyst identity stamped on every automatic disposition (auto_disposition.py).
+# Defined here — not in auto_disposition — so that enrichment can import it
+# without a cycle (enrichment ← llm_triage ← auto_disposition). Anything that
+# computes disposition *statistics* fed back into triage (rule/agent history in
+# enrichment, rule FP rate in auto_disposition) MUST exclude this analyst:
+# AI dispositions are model output, and letting them re-enter the model's
+# evidence base creates a self-reinforcing loop (observed live: a rule's
+# recent-100 window became 100% kahu-ai auto-confirms, so every new triage was
+# told "100% true-positive history" and auto-confirmed again). Human
+# dispositions are the only ground truth.
+AI_ANALYST = "kahu-ai"
+
 # Control tags for triage evidence — maps to NIST 800-171 / CMMC / HIPAA
 ALERT_RAISED_CONTROLS = [
     "800-171:3.3.1",  # Create and retain audit records

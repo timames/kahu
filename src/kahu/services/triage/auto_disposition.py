@@ -22,12 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kahu.models.alerts import Alert, AlertDisposition, DispositionVerdict, Severity
 from kahu.models.tickets import Ticket, TicketStatus, TicketType
 from kahu.services.compliance.evidence import record_evidence
-from kahu.services.triage.disposition import record_disposition
+from kahu.services.triage.disposition import AI_ANALYST, record_disposition
 from kahu.services.triage.llm_triage import canonical_verdict
 
 logger = logging.getLogger(__name__)
-
-AI_ANALYST = "kahu-ai"
 
 # Thresholds: (dismiss_confidence, confirm_confidence)
 # None means never auto-act
@@ -338,9 +336,15 @@ def _infer_verdict(
 
 
 async def _get_rule_fp_rate(rule_id: str, session: AsyncSession) -> float | None:
-    """Get false-positive rate for a rule from disposition history.
+    """Get false-positive rate for a rule from HUMAN disposition history.
 
     Returns None if no history exists (< 5 dispositions).
+
+    kahu-ai's own dispositions are excluded: this rate feeds the noisy-OR
+    dismiss confidence, so counting the AI's past auto-acknowledgements would
+    let each auto-dismiss raise the odds of the next one — a self-reinforcing
+    slide toward silence, which is exactly the failure this pipeline exists to
+    prevent. Only human verdicts are signal.
     """
     if not rule_id:
         return None
@@ -351,6 +355,7 @@ async def _get_rule_fp_rate(rule_id: str, session: AsyncSession) -> float | None
             .select_from(Alert)
             .join(AlertDisposition, AlertDisposition.alert_id == Alert.id)
             .where(Alert.rule_id == rule_id)
+            .where(AlertDisposition.analyst != AI_ANALYST)
         )
         total = await session.scalar(total_stmt) or 0
 
@@ -362,6 +367,7 @@ async def _get_rule_fp_rate(rule_id: str, session: AsyncSession) -> float | None
             .select_from(Alert)
             .join(AlertDisposition, AlertDisposition.alert_id == Alert.id)
             .where(Alert.rule_id == rule_id)
+            .where(AlertDisposition.analyst != AI_ANALYST)
             .where(
                 AlertDisposition.verdict.in_(
                     [

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kahu.clients.redaction import redact_secrets
 from kahu.clients.wazuh import WazuhIndexerClient
 from kahu.models.alerts import Alert, AlertDisposition, Severity
+from kahu.services.triage.disposition import AI_ANALYST
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +224,12 @@ async def _fetch_historical_dispositions(
 
     Returns a dict with total count, verdict breakdown, false positive rate,
     and recent examples — giving the LLM a strong statistical signal.
+
+    HUMAN dispositions only. The prompt tells the model this history is its
+    strongest signal, so kahu-ai's own auto-dispositions must not appear here:
+    with them included, a burst of auto-confirms filled the recent window and
+    every subsequent triage was told "100% true-positive history" — the model
+    citing itself as evidence, compounding each cycle.
     """
     if session is None or not rule_id:
         return {}
@@ -232,6 +239,7 @@ async def _fetch_historical_dispositions(
             select(Alert, AlertDisposition)
             .join(AlertDisposition, AlertDisposition.alert_id == Alert.id)
             .where(Alert.rule_id == rule_id)
+            .where(AlertDisposition.analyst != AI_ANALYST)
             .order_by(Alert.created_at.desc())
             .limit(MAX_HISTORICAL_DISPOSITIONS)
         )
@@ -288,6 +296,8 @@ async def _fetch_agent_history(
     """Compute disposition stats for this specific agent/host.
 
     Shows whether this host tends to generate noise or real threats.
+    HUMAN dispositions only — see _fetch_historical_dispositions for why
+    kahu-ai's own verdicts are excluded from statistical signals.
     """
     if session is None or not agent_name:
         return {}
@@ -297,6 +307,7 @@ async def _fetch_agent_history(
             select(Alert, AlertDisposition)
             .join(AlertDisposition, AlertDisposition.alert_id == Alert.id)
             .where(Alert.agent_name == agent_name)
+            .where(AlertDisposition.analyst != AI_ANALYST)
             .order_by(Alert.created_at.desc())
             .limit(MAX_HISTORICAL_DISPOSITIONS)
         )
