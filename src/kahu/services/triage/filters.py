@@ -49,6 +49,13 @@ CRITICAL_RULE_IDS: set[str] = {
     "100200",  # Rootkit detection
     "87700",  # Vulnerability detected — critical CVSS
     "87900",  # Active response triggered
+    # Synthetic connector rules (azure_transform.py, reserved block 200000-209999).
+    # Both already map to level 13 (critical band); listing them here is defense
+    # in depth — a mute, suppression list entry, or a regressed level mapping can
+    # never silence a Defender-high or Entra-high-risk finding, and the
+    # auto-dismiss floor keys on this set independently of severity.
+    "200104",  # Microsoft Defender high-severity alert
+    "200204",  # Entra ID high-risk sign-in
 }
 
 

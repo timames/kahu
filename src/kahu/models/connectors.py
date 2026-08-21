@@ -31,6 +31,11 @@ class ConnectorInstance(Base, UUIDPrimaryKey, TimestampMixin):
     )
     config: Mapped[dict] = mapped_column(JSONB, default=dict)
     credentials: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # Per-instance poll cursor for native pollers (azure_poller):
+    # {"watermark": iso8601, "seen_ids": [...], "today": "YYYY-MM-DD",
+    #  "today_count": N}. Persisted per successful poll so ingestion position
+    # survives restarts (unlike the Wazuh poller's in-memory cursor).
+    cursor: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     events_today: Mapped[int] = mapped_column(default=0)
     events_total: Mapped[int] = mapped_column(default=0)

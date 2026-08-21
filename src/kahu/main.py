@@ -12,6 +12,7 @@ from kahu.api import router as api_router
 from kahu.clients.ollama import OllamaClient
 from kahu.config import settings
 from kahu.db import engine
+from kahu.services.connectors.azure_poller import run_azure_poller
 from kahu.services.pono import run_pono_loop
 from kahu.services.triage.poller import run_poller
 from kahu.services.triage.reeval import start_reeval_loop, stop_reeval_loop
@@ -59,6 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # Startup — launch background tasks
     poller_task = asyncio.create_task(run_poller(interval=15.0))
+    azure_poller_task = asyncio.create_task(run_azure_poller(interval=60.0))
     pono_task = asyncio.create_task(run_pono_loop(interval=300.0))
     # Fire-and-forget model warm-up; kept referenced so it isn't GC'd mid-flight.
     preload_task = asyncio.create_task(_preload_ollama())
@@ -66,6 +68,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     yield
     # Shutdown
     poller_task.cancel()
+    azure_poller_task.cancel()
     pono_task.cancel()
     preload_task.cancel()
     await stop_reeval_loop()

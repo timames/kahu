@@ -325,6 +325,147 @@ _register(
     )
 )
 
+# ── Microsoft Azure (native Kahu pollers) ─────────────────
+#
+# These three types are ingested by Kahu itself (services/connectors/
+# azure_poller.py), not via Wazuh. They share an Entra app registration:
+# one ConnectorInstance per tenant (multi-tenant = multiple instances).
+# Setup walkthrough: docs/connectors/microsoft-azure.md.
+
+
+def _azure_common_fields(secret_help: str) -> tuple[ConnectorField, ...]:
+    return (
+        ConnectorField(
+            "tenant_id", "Tenant ID", placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        ),
+        ConnectorField(
+            "client_id",
+            "Application (Client) ID",
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        ),
+        ConnectorField(
+            "client_secret",
+            "Client Secret",
+            field_type="password",
+            help_text=secret_help,
+        ),
+        ConnectorField(
+            "cloud_environment",
+            "Cloud Environment",
+            field_type="select",
+            placeholder="commercial,gcc_high",
+            help_text="GCC High tenants use login.microsoftonline.us / graph.microsoft.us",
+        ),
+    )
+
+
+_register(
+    ConnectorType(
+        id="microsoft_defender",
+        name="Microsoft Defender XDR",
+        category="cloud",
+        icon="\U0001f6e1\ufe0f",  # 🛡️
+        auth_method="credentials",
+        description=(
+            "Security alerts from Defender for Endpoint, Office 365, Identity,"
+            " and Cloud Apps via the Microsoft Graph security API."
+        ),
+        events_per_day="10–1K",
+        setup_guide_url="https://learn.microsoft.com/en-us/graph/api/security-list-alerts_v2",
+        fields=_azure_common_fields(
+            "App registration needs the SecurityAlert.Read.All APPLICATION"
+            " permission on Microsoft Graph, with admin consent granted."
+        ),
+    )
+)
+
+_register(
+    ConnectorType(
+        id="azure_log_analytics",
+        name="Azure Log Analytics",
+        category="cloud",
+        icon="\u2601\ufe0f",  # ☁️
+        auth_method="credentials",
+        description=(
+            "Rows from a scheduled KQL query against a Log Analytics workspace"
+            " (Sentinel tables, custom logs, Azure diagnostics)."
+        ),
+        events_per_day="Depends on query — keep it narrow",
+        setup_guide_url="https://learn.microsoft.com/en-us/azure/azure-monitor/logs/api/overview",
+        fields=(
+            *_azure_common_fields(
+                "App needs the Data.Read APPLICATION permission on the Log"
+                " Analytics API (admin consent) AND the Log Analytics Reader"
+                " RBAC role on the workspace."
+            ),
+            ConnectorField(
+                "workspace_id",
+                "Workspace ID",
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                help_text="Log Analytics workspace > Overview > Workspace ID (a GUID)",
+            ),
+            ConnectorField(
+                "kql_query",
+                "KQL Query",
+                field_type="textarea",
+                placeholder="SecurityEvent | where EventID == 4625",
+                help_text=(
+                    "Runs each poll over the new time window only. Do NOT point"
+                    " this at high-volume tables — every row becomes a triage"
+                    " alert. Optionally project a KahuLevel column (3-15) to set"
+                    " per-row severity."
+                ),
+            ),
+            ConnectorField(
+                "query_name",
+                "Query Name",
+                placeholder="Failed Windows logons",
+                help_text="Shown as the alert description in the feed",
+            ),
+            ConnectorField(
+                "default_level",
+                "Default Severity Level",
+                field_type="select",
+                placeholder="5,7,10,12",
+                help_text="Used when a row has no KahuLevel: 5=low 7=medium 10=high 12=critical",
+            ),
+        ),
+    )
+)
+
+_register(
+    ConnectorType(
+        id="entra_signin",
+        name="Entra ID Sign-in Logs",
+        category="identity",
+        icon="\U0001f511",  # 🔑
+        auth_method="credentials",
+        description=(
+            "Risky and failed sign-ins from Entra ID (Azure AD) via the Microsoft"
+            " Graph auditLogs API. Requires Entra ID P1 or P2."
+        ),
+        events_per_day="100–50K (mode-dependent)",
+        setup_guide_url="https://learn.microsoft.com/en-us/graph/api/signin-list",
+        fields=(
+            *_azure_common_fields(
+                "App registration needs the AuditLog.Read.All and"
+                " Directory.Read.All APPLICATION permissions on Microsoft"
+                " Graph, with admin consent granted."
+            ),
+            ConnectorField(
+                "signin_filter",
+                "Sign-ins to Ingest",
+                field_type="select",
+                placeholder="risky_or_failed,risky_only,failed_only,all",
+                help_text=(
+                    "'all' ingests every sign-in — avoid on large tenants;"
+                    " each event is triaged individually."
+                ),
+            ),
+        ),
+    )
+)
+
 # ── Identity Sources ───────────────────────────────────────
 
 _register(

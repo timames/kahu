@@ -16,6 +16,7 @@ from kahu.api.devices import fetch_wazuh_devices
 from kahu.clients.wazuh import WazuhIndexerClient
 from kahu.db import get_session
 from kahu.models.connectors import ConnectorInstance, ConnectorStatus
+from kahu.services.connectors.azure_test import AZURE_TEST_TYPES, run_azure_test
 from kahu.services.connectors.catalog import CATALOG, get_catalog, get_categories
 
 logger = logging.getLogger(__name__)
@@ -218,9 +219,12 @@ async def test_source(
     instance.status = ConnectorStatus.TESTING
     await session.commit()
 
-    # For now, simulate a connection test based on auth method
-    # In production, each connector type would have a real test_connection()
-    success, message = _simulate_test(ct, instance)
+    # Azure types get a real probe (token + cheap API call); everything else
+    # keeps the placeholder check until it grows a real test_connection().
+    if instance.connector_type in AZURE_TEST_TYPES:
+        success, message = await run_azure_test(instance)
+    else:
+        success, message = _simulate_test(ct, instance)
 
     instance.status = ConnectorStatus.ACTIVE if success else ConnectorStatus.ERROR
     instance.error_message = None if success else message
