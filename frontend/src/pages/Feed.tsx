@@ -790,8 +790,81 @@ function MutedRulesModal({
   onUnmute: (muteId: string) => void;
   pending: boolean;
 }) {
+  // Proactive mute-by-ID form — same endpoint and guardrails as muting from an
+  // alert card (critical rules rejected server-side, duplicates 409).
+  const queryClient = useQueryClient();
+  const [newRuleId, setNewRuleId] = useState("");
+  const [newReason, setNewReason] = useState("");
+  const [newDuration, setNewDuration] = useState<"24h" | "7d" | null>("24h");
+  const addMut = useMutation({
+    mutationFn: () => muteRule(newRuleId.trim(), newReason, newDuration),
+    onSuccess: () => {
+      setNewRuleId("");
+      setNewReason("");
+      queryClient.invalidateQueries({ queryKey: ["mutes"] });
+    },
+  });
+
+  const durationBtn = (value: "24h" | "7d" | null, label: string) => (
+    <button
+      type="button"
+      onClick={() => setNewDuration(value)}
+      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
+        newDuration === value
+          ? "bg-kahu-accent text-white"
+          : "bg-kahu-elevated border border-kahu-border text-slate-400 hover:text-white"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <FeedModalShell onClose={onClose} title={`Muted rules (${mutes.length})`}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (newRuleId.trim()) addMut.mutate();
+        }}
+        className="mb-4 p-3 rounded-lg bg-kahu-elevated/50 border border-kahu-border"
+      >
+        <div className="text-xs text-slate-500 mb-2 font-medium">Mute a rule by ID</div>
+        <div className="flex gap-2 mb-2">
+          <input
+            value={newRuleId}
+            onChange={(e) => setNewRuleId(e.target.value.replace(/[^0-9]/g, ""))}
+            placeholder="Rule ID"
+            inputMode="numeric"
+            className="w-28 px-3 py-2 rounded-lg text-sm bg-kahu-elevated border border-kahu-border text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-kahu-accent font-mono"
+          />
+          <input
+            value={newReason}
+            onChange={(e) => setNewReason(e.target.value)}
+            placeholder="Reason (optional)"
+            className="flex-1 min-w-0 px-3 py-2 rounded-lg text-sm bg-kahu-elevated border border-kahu-border text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-kahu-accent"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          {durationBtn("24h", "24 hours")}
+          {durationBtn("7d", "7 days")}
+          {durationBtn(null, "Forever")}
+          <button
+            type="submit"
+            disabled={addMut.isPending || !newRuleId.trim()}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-kahu-accent text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            <BellOff size={12} /> Mute
+          </button>
+        </div>
+        {addMut.isError && (
+          <p className="text-xs text-red-400 mt-2 break-all">{String(addMut.error)}</p>
+        )}
+        <p className="text-[11px] text-slate-600 mt-2">
+          Alerts from the rule are still recorded for audit but skip AI triage and the pending
+          queue. Critical rules and high/critical alerts are never muted.
+        </p>
+      </form>
+
       {mutes.length === 0 ? (
         <p className="text-sm text-slate-400">No rules are muted.</p>
       ) : (
